@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Photobooth</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <h1>✨ AI Photobooth</h1>
+            <p class="subtitle">Capture, Transform, Print</p>
+        </header>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Left Panel: Camera & Capture -->
+            <div class="panel camera-panel">
+                <h2>📸 Camera</h2>
+                
+                <!-- Camera Preview -->
+                <div class="camera-container">
+                    <video id="webcam" autoplay playsinline></video>
+                    <canvas id="canvas" style="display: none;"></canvas>
+                    <div id="camera-placeholder" class="camera-placeholder">
+                        <div class="placeholder-content">
+                            <span class="camera-icon">📷</span>
+                            <p>Click "Start Camera" to begin</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Camera Controls -->
+                <div class="controls">
+                    <button id="startCamera" class="btn btn-primary">
+                        <span class="btn-icon">🎥</span> Start Camera
+                    </button>
+                    <button id="captureBtn" class="btn btn-success" disabled>
+                        <span class="btn-icon">📸</span> Capture Photo
+                    </button>
+                </div>
+
+                <!-- Captured Image Preview -->
+                <div id="capturedImageContainer" class="captured-container" style="display: none;">
+                    <h3>Captured Photo</h3>
+                    <img id="capturedImage" alt="Captured photo">
+                    <button id="retakeBtn" class="btn btn-secondary">
+                        <span class="btn-icon">🔄</span> Retake
+                    </button>
+                </div>
+            </div>
+
+            <!-- Right Panel: Presets & Generation -->
+            <div class="panel presets-panel">
+                <h2>🎨 Choose Your Style</h2>
+                
+                <!-- Preset Selection -->
+                <div class="presets-grid" id="presetsGrid">
+                    <!-- Presets will be dynamically loaded -->
+                </div>
+
+                <!-- Selected Preset Info -->
+                <div id="selectedPresetInfo" class="preset-info" style="display: none;">
+                    <h3>Selected: <span id="presetName"></span></h3>
+                    <p id="presetDescription"></p>
+                </div>
+
+                <!-- Generate Button -->
+                <button id="generateBtn" class="btn btn-generate" disabled>
+                    <span class="btn-icon">✨</span> Generate AI Image
+                </button>
+
+                <!-- Loading State -->
+                <div id="loadingState" class="loading-state" style="display: none;">
+                    <div class="spinner"></div>
+                    <p>Creating your masterpiece...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Generated Image Display -->
+        <div id="resultPanel" class="result-panel" style="display: none;">
+            <h2>🎉 Your AI Generated Image</h2>
+            <div class="result-container">
+                <img id="generatedImage" alt="AI Generated Image">
+            </div>
+            <div class="result-actions">
+                <button id="printBtn" class="btn btn-print">
+                    <span class="btn-icon">🖨️</span> Print Image
+                </button>
+                <button id="newPhotoBtn" class="btn btn-secondary">
+                    <span class="btn-icon">🔄</span> Take New Photo
+                </button>
+            </div>
+        </div>
+
+        <!-- Status Messages -->
+        <div id="statusMessage" class="status-message"></div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
