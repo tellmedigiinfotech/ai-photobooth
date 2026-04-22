@@ -1,324 +1,580 @@
-// Global state
-let stream = null;
-let capturedImageBlob = null;
-let selectedPreset = null;
+// ═════════════════════════════════════════════════════════════════
+//  AI Photobooth — Heritage edition
+//  Three-step wizard: Capture → Choose → Reveal
+// ═════════════════════════════════════════════════════════════════
 
-// DOM Elements
-const webcam = document.getElementById('webcam');
-const canvas = document.getElementById('canvas');
-const cameraPlaceholder = document.getElementById('camera-placeholder');
-const startCameraBtn = document.getElementById('startCamera');
-const captureBtn = document.getElementById('captureBtn');
-const retakeBtn = document.getElementById('retakeBtn');
-const capturedImageContainer = document.getElementById('capturedImageContainer');
-const capturedImage = document.getElementById('capturedImage');
-const presetsGrid = document.getElementById('presetsGrid');
-const selectedPresetInfo = document.getElementById('selectedPresetInfo');
-const presetName = document.getElementById('presetName');
-const presetDescription = document.getElementById('presetDescription');
-const generateBtn = document.getElementById('generateBtn');
-const loadingState = document.getElementById('loadingState');
-const resultPanel = document.getElementById('resultPanel');
-const generatedImage = document.getElementById('generatedImage');
-const printBtn = document.getElementById('printBtn');
-const newPhotoBtn = document.getElementById('newPhotoBtn');
-const statusMessage = document.getElementById('statusMessage');
+// ── State ────────────────────────────────────────────────────────
+const state = {
+    step: 1,
+    stream: null,
+    capturedBlob: null,
+    capturedUrl: null,
+    selectedPreset: null,
+    cameraDevices: [],
+};
 
-// Preset configurations
+// ── DOM ──────────────────────────────────────────────────────────
+const $ = (id) => document.getElementById(id);
+
+const el = {
+    stepperItems: document.querySelectorAll('.stepper__item'),
+    stepSections: document.querySelectorAll('.step'),
+
+    // Step 1
+    webcam:             $('webcam'),
+    canvas:             $('canvas'),
+    cameraPlaceholder:  $('cameraPlaceholder'),
+    startCameraBtn:     $('startCameraBtn'),
+    captureControls:    $('captureControls'),
+    cameraSourceField:  $('cameraSourceField'),
+    cameraSelect:       $('cameraSelect'),
+    captureBtn:         $('captureBtn'),
+    captureView:        document.querySelector('.capture-view'),
+    captureReview:      $('captureReview'),
+    capturedImage:      $('capturedImage'),
+    retakeBtn:          $('retakeBtn'),
+    toStep2Btn:         $('toStep2Btn'),
+
+    // Step 2
+    contextPhoto:       $('contextPhoto'),
+    editPhotoBtn:       $('editPhotoBtn'),
+    presetsGrid:        $('presetsGrid'),
+    generateBtn:        $('generateBtn'),
+    selectedDestName:   $('selectedDestinationName'),
+
+    // Step 3
+    loadingState:       $('loadingState'),
+    loadingHint:        $('loadingHint'),
+    resultPanel:        $('resultPanel'),
+    generatedImage:     $('generatedImage'),
+    resultLocation:     $('resultLocation'),
+    newPhotoBtn:        $('newPhotoBtn'),
+    downloadBtn:        $('downloadBtn'),
+    shareWhatsAppBtn:   $('shareWhatsAppBtn'),
+    printBtn:           $('printBtn'),
+
+    toast:              $('toast'),
+    yearSpan:           $('yearSpan'),
+};
+
+// Per-preset prompts describe the scene + attire. The server adds the
+// identity-preservation scaffolding and labels the three reference angles,
+// so no prefix is appended here — keeping prompt signal-to-noise high.
+
+// ── Presets ──────────────────────────────────────────────────────
 const presets = [
     {
         id: 1,
-        name: 'Royal Palace',
-        description: 'Transform into royalty at a majestic palace',
-        prompt: 'Using the first image as a reference photo of a real person, generate a new hyper-realistic photograph of this EXACT SAME person standing inside a grand Indian royal palace. The person must wear an ornate royal Scindhia-style sherwani with gold embroidery, royal turban with jeweled brooch, and stand with a confident regal posture near an ornate throne chair. CRITICAL: Preserve the person\'s exact face shape, skin tone, eye color, nose structure, jawline, hair texture, and all unique facial features with photographic accuracy. The background should be the palace interior from the second reference image. Lighting should be warm, golden, cinematic. Shot as a professional portrait photograph with shallow depth of field.',
-        backgroundUrl: 'assets/backgrounds/palace.jpg'
+        name: 'Khajuraho — Kandariya Mahadev',
+        description: 'UNESCO-listed Chandela-era sandstone temples',
+        prompt: 'Composite the person naturally into the provided background photograph of the Kandariya Mahadev and Jagdambi temples at Khajuraho, Madhya Pradesh. Place the person standing on the temple platform in the mid-foreground, framed by the carved sandstone wall behind them, framed as a medium shot (waist-up, person filling roughly half the frame). Keep the attire subtle and everyday: for men, a plain ivory cotton kurta with cream cotton pyjama trousers; for women, a Chanderi silk-cotton saree in soft mustard with a thin gold border, small gold stud earrings and a small red bindi. Match the skin lighting to the soft diffused daylight on the pale sandstone.',
+        backgroundUrl: 'assets/backgrounds/Jagdambi Temple , Kandariya Mahadev Temple.jpg'
     },
     {
         id: 2,
-        name: 'Taj Mahal',
-        description: 'Stand before the iconic Taj Mahal',
-        prompt: 'Using the first image as a reference photo of a real person, generate a new hyper-realistic photograph of this EXACT SAME person standing on the main walkway leading to the Taj Mahal. The person must wear an elegant traditional Indian outfit — a richly embroidered cream and gold sherwani for men or an embellished anarkali suit for women. CRITICAL: Preserve the person\'s exact face shape, skin tone, eye color, nose structure, jawline, hair texture, and all unique facial features with photographic accuracy. The Taj Mahal should be visible behind them matching the second reference image. Golden hour lighting with soft warm tones. Shot as a high-end travel portrait with the monument in soft focus behind.',
-        backgroundUrl: 'assets/backgrounds/taj-mahal.jpg'
+        name: 'Khajuraho — Lakshmana Temple',
+        description: 'The finely carved 10th-century Chandela temple',
+        prompt: 'Composite the person naturally into the provided background photograph of the Lakshmana Temple at Khajuraho, Madhya Pradesh. Place the person standing on the temple plinth in the mid-foreground, framed by the carved sandstone reliefs behind them, framed as a medium shot (waist-up, person filling roughly half the frame). Keep the attire subtle and everyday: for men, a plain off-white cotton kurta with cream cotton pyjama trousers; for women, a Chanderi silk-cotton saree in ivory with a narrow gold border, small gold stud earrings and a small red bindi. Match the skin lighting to the soft diffused sunlight on the sandstone.',
+        backgroundUrl: 'assets/backgrounds/Lakshmana Temple IMG_9753-HDR.jpg'
     },
     {
         id: 3,
-        name: 'Jaipur Fort',
-        description: 'Experience the grandeur of Rajasthan',
-        prompt: 'Using the first image as a reference photo of a real person, generate a new hyper-realistic photograph of this EXACT SAME person standing at a magnificent Rajasthani fort. The person must wear a vibrant traditional Rajasthani royal outfit with a colorful bandhani turban, mirror-work jacket, and dhoti-kurta for men or a heavily embroidered lehenga choli for women. CRITICAL: Preserve the person\'s exact face shape, skin tone, eye color, nose structure, jawline, hair texture, and all unique facial features with photographic accuracy. The fort architecture from the second reference image should form the background. Bright daylight with dramatic shadows on sandstone walls. Professional portrait photography style.',
-        backgroundUrl: 'assets/backgrounds/jaipur-fort.jpg'
+        name: 'Orchha — Jahangir Mahal',
+        description: '17th-century Bundela palace, arched courtyards',
+        prompt: 'Composite the person naturally into the provided background photograph of Jahangir Mahal at Orchha, Madhya Pradesh. Place the person standing in an arched gallery in the mid-foreground, framed by the sandstone arches behind them, framed as a medium shot (waist-up, person filling roughly half the frame). Keep the attire subtle and everyday: for men, a plain jade-green cotton kurta with cream cotton pyjama trousers; for women, a Chanderi silk-cotton saree in deep red with a narrow gold border, small gold stud earrings and a small red bindi. Match the skin lighting to the soft diffused daylight falling through the arches.',
+        backgroundUrl: 'assets/backgrounds/Jahangir Mahal 6 - Copy.jpg'
     },
     {
         id: 4,
-        name: 'Mumbai Gateway',
-        description: 'Iconic Gateway of India backdrop',
-        prompt: 'Using the first image as a reference photo of a real person, generate a new hyper-realistic photograph of this EXACT SAME person standing in front of the Gateway of India monument in Mumbai. The person must wear a sophisticated, well-fitted modern Indian formal outfit — a tailored Nehru jacket with silk kurta for men or an elegant contemporary saree for women. CRITICAL: Preserve the person\'s exact face shape, skin tone, eye color, nose structure, jawline, hair texture, and all unique facial features with photographic accuracy. The Gateway of India from the second reference image should be visible behind. Late afternoon light with warm golden tones reflecting off the harbour. Cinematic portrait style.',
-        backgroundUrl: 'assets/backgrounds/gateway.jpg'
+        name: 'Orchha — Jahangir Gate',
+        description: 'Monumental Bundela-Mughal archway',
+        prompt: 'Composite the person naturally into the provided background photograph of the grand entrance gate of Jahangir Mahal at Orchha, Madhya Pradesh. Place the person standing just in front of the archway in the mid-foreground, framed by the carved stone brackets above them, framed as a medium shot (waist-up, person filling roughly half the frame). Keep the attire subtle and everyday: for men, a plain saffron cotton kurta with cream cotton pyjama trousers; for women, a Chanderi silk-cotton saree in deep maroon with a narrow gold border, small gold stud earrings and a small red bindi. Match the skin lighting to the soft diffused daylight on the pale stone.',
+        backgroundUrl: 'assets/backgrounds/jahangir gate orchha.jpg'
     },
     {
         id: 5,
-        name: 'Mysore Palace',
-        description: 'Royal Mysore Palace setting',
-        prompt: 'Using the first image as a reference photo of a real person, generate a new hyper-realistic photograph of this EXACT SAME person standing inside the lavish Mysore Palace. The person must wear a traditional South Indian royal silk outfit — a richly woven Mysore silk gold-bordered dhoti and angavastram for men or a stunning Kanjeevaram silk saree with temple jewelry for women. CRITICAL: Preserve the person\'s exact face shape, skin tone, eye color, nose structure, jawline, hair texture, and all unique facial features with photographic accuracy. The ornate palace interior from the second reference image should be the backdrop. Warm interior lighting with golden chandeliers. Royal portrait photography style.',
-        backgroundUrl: 'assets/backgrounds/mysore.jpg'
+        name: 'Mandu — Watchful Gates',
+        description: 'Afghan-era fortress gateways of the Malwa Sultanate',
+        prompt: 'Composite the person naturally into the provided background photograph of the monumental stone gateways of Mandu, Madhya Pradesh. Place the person standing beneath the gateway arch in the mid-foreground, framed by the weathered stone masonry behind them, framed as a medium shot (waist-up, person filling roughly half the frame). Keep the attire subtle and everyday: for men, a plain deep-indigo cotton kurta with cream cotton pyjama trousers; for women, a Maheshwari silk-cotton saree in teal with a rust-red border, small silver stud earrings and a small red bindi. Match the skin lighting to the soft diffused daylight on the weathered stone.',
+        backgroundUrl: 'assets/backgrounds/Mandu’s Watchful Gates.jpg'
     },
     {
         id: 6,
-        name: 'Red Fort',
-        description: 'Historic Red Fort in Delhi',
-        prompt: 'Using the first image as a reference photo of a real person, generate a new hyper-realistic photograph of this EXACT SAME person standing at the Red Fort in Delhi. The person must wear opulent Mughal-era inspired clothing — a richly embroidered brocade achkan with a jeweled belt and ornate juttis for men or an elaborate Mughal-style anarkali with kundan jewelry for women. CRITICAL: Preserve the person\'s exact face shape, skin tone, eye color, nose structure, jawline, hair texture, and all unique facial features with photographic accuracy. The Red Fort\'s iconic red sandstone walls from the second reference image should be the background. Dramatic sunset lighting. High-end editorial portrait style.',
-        backgroundUrl: 'assets/backgrounds/red-fort.jpg'
+        name: 'Maheshwar — Chhatri by the River',
+        description: 'Holkar cenotaphs above the Narmada ghats',
+        prompt: 'Composite the person naturally into the provided background photograph of the riverside chhatri at Maheshwar, Madhya Pradesh. Place the person standing on the stone platform in the mid-foreground, framed by the sandstone chhatri rising behind them, framed as a medium shot (waist-up, person filling roughly half the frame). Keep the attire subtle and culturally Maharashtrian: for men, a plain cream cotton kurta with a cream cotton dhoti; for women, a Maheshwari silk-cotton saree in burgundy with a thin gold border, a small gold nath (nose pin), a simple gold thushi (short choker), small gold stud earrings and a small red bindi. Match the skin lighting to the soft diffused river-reflected daylight.',
+        backgroundUrl: 'assets/backgrounds/Chattei River view (7).jpg'
     },
     {
         id: 7,
-        name: 'Hawa Mahal',
-        description: 'The Palace of Winds',
-        prompt: 'Using the first image as a reference photo of a real person, generate a new hyper-realistic photograph of this EXACT SAME person standing in front of the Hawa Mahal (Palace of Winds) in Jaipur. The person must wear a stunning traditional Rajasthani outfit — a vivid saffron or maroon royal achkan with a Rajputi turban for men or an exquisite bandhani print ghagra choli with silver jewelry for women. CRITICAL: Preserve the person\'s exact face shape, skin tone, eye color, nose structure, jawline, hair texture, and all unique facial features with photographic accuracy. The honeycomb facade of Hawa Mahal from the second reference image should fill the background. Morning golden light. Architectural portrait photography.',
-        backgroundUrl: 'assets/backgrounds/hawa-mahal.jpg'
+        name: 'Holkar Chhatris I',
+        description: 'Domed sandstone cenotaphs with pillared verandas',
+        prompt: 'Composite the person naturally into the provided background photograph of the Holkar-dynasty chhatris in Madhya Pradesh. Place the person standing on the stone plinth in the mid-foreground, framed by the carved sandstone columns behind them, framed as a medium shot (waist-up, person filling roughly half the frame). Keep the attire subtle and culturally Maharashtrian: for men, a plain cream cotton kurta with cream cotton pyjama trousers; for women, a Maheshwari silk-cotton saree in forest green with a thin gold border, a small gold nath, a simple gold thushi, small gold stud earrings and a small red bindi. Match the skin lighting to the soft diffused daylight on the sandstone.',
+        backgroundUrl: 'assets/backgrounds/Chattri Monuments 1.jpg'
     },
     {
         id: 8,
-        name: 'Amber Fort',
-        description: 'Majestic Amber Fort experience',
-        prompt: 'Using the first image as a reference photo of a real person, generate a new hyper-realistic photograph of this EXACT SAME person standing at the grand Amber Fort in Jaipur. The person must wear a regal Rajasthani warrior-prince outfit — an embroidered velvet jacket with gold buttons, fitted churidar, and a jeweled turban for men or a royal Rajputi poshak with heavy silver jewelry for women. CRITICAL: Preserve the person\'s exact face shape, skin tone, eye color, nose structure, jawline, hair texture, and all unique facial features with photographic accuracy. The majestic Amber Fort architecture from the second reference image should be the backdrop. Dramatic daylight with warm amber tones on stone walls. Epic cinematic portrait.',
-        backgroundUrl: 'assets/backgrounds/amber-fort.jpg'
+        name: 'Holkar Chhatris II',
+        description: 'Regal silhouette of a domed royal cenotaph',
+        prompt: 'Composite the person naturally into the provided background photograph of the domed chhatri monument in Madhya Pradesh. Place the person standing in the mid-foreground directly in front of the chhatri, framed by its carved silhouette behind them, framed as a medium shot (waist-up, person filling roughly half the frame). Keep the attire subtle and culturally Maharashtrian: for men, a plain ivory cotton kurta with cream cotton pyjama trousers; for women, a Maheshwari silk-cotton saree in deep red with a thin gold border, a small gold nath, a simple gold thushi, small gold stud earrings and a small red bindi. Match the skin lighting to the soft diffused golden daylight on the monument.',
+        backgroundUrl: 'assets/backgrounds/Chattri Monuments 4.jpg'
+    },
+    {
+        id: 9,
+        name: 'Krishnabai Holkar Chhatri',
+        description: 'The queen\'s cenotaph above the Narmada, Maheshwar',
+        prompt: 'Composite the person naturally into the provided background photograph of the Krishnabai Holkar chhatri at Maheshwar, Madhya Pradesh. Place the person standing on the stone plinth in the mid-foreground, framed by the chhatri rising behind them, framed as a medium shot (waist-up, person filling roughly half the frame). Keep the attire subtle and culturally Maharashtrian: for men, a plain cream cotton kurta with cream cotton pyjama trousers; for women, a Maheshwari silk-cotton saree in royal blue with a thin gold border, a small gold nath, a simple gold thushi, small gold stud earrings and a small red bindi. Match the skin lighting to the soft diffused Narmada-side daylight.',
+        backgroundUrl: 'assets/backgrounds/Krishnabai holkar chhatri .jpg'
+    },
+    {
+        id: 10,
+        name: 'Indore — Rajwada Palace',
+        description: 'The seven-storey Holkar palace of Indore',
+        prompt: 'Composite the person naturally into the provided background photograph of Rajwada Palace in Indore, Madhya Pradesh. Place the person standing before the main entrance in the mid-foreground, framed by the wooden-and-stone palace facade behind them, framed as a medium shot (waist-up, person filling roughly half the frame). Keep the attire subtle and culturally Maharashtrian: for men, a plain cream cotton kurta with cream cotton pyjama trousers; for women, a Paithani silk-cotton saree in peacock green with a thin gold border, a small gold nath, a simple gold thushi, small gold stud earrings and a small red bindi. Match the skin lighting to the soft diffused daylight on the palace facade.',
+        backgroundUrl: 'assets/backgrounds/Rajwada Indore.jpg'
+    },
+    {
+        id: 11,
+        name: 'Indore — Rajwada Courtyard',
+        description: 'Inside the Holkar royal seat',
+        prompt: 'Composite the person naturally into the provided background photograph of the inner courtyard and facade of Rajwada Palace in Indore, Madhya Pradesh. Place the person standing in the mid-foreground courtyard, framed by the palace wings behind them, framed as a medium shot (waist-up, person filling roughly half the frame). Keep the attire subtle and culturally Maharashtrian: for men, a plain cream cotton kurta with cream cotton pyjama trousers; for women, a Maheshwari silk-cotton saree in teal with a thin gold border, a small gold nath, a simple gold thushi, small gold stud earrings and a small red bindi. Match the skin lighting to the soft diffused daylight of the courtyard.',
+        backgroundUrl: 'assets/backgrounds/RajWada 15.jpg'
+    },
+    {
+        id: 12,
+        name: 'Kheoni Sanctuary — Wilds of MP',
+        description: 'Central Indian teak and sal forest',
+        prompt: 'Composite the person naturally into the provided background photograph of Kheoni Wildlife Sanctuary in Madhya Pradesh. Place the person standing on the forest path in the mid-foreground, framed by the teak and sal trees behind them, framed as a medium shot (waist-up, person filling roughly half the frame). Keep the attire simple and everyday: for men, a plain olive cotton kurta with loose cream cotton trousers; for women, a plain olive cotton kurta with matching cotton palazzo trousers. Match the skin lighting to the soft dappled forest daylight.',
+        backgroundUrl: 'assets/backgrounds/kheoni wildlife sanctuary .jpg'
+    },
+    {
+        id: 13,
+        name: 'Kheoni Sanctuary — Forest Trail',
+        description: 'Quiet woodland of teak, sal and bamboo',
+        prompt: 'Composite the person naturally into the provided background photograph of a forest trail inside Kheoni Wildlife Sanctuary, Madhya Pradesh. Place the person standing on the trail in the mid-foreground, framed by the teak and bamboo trees behind them, framed as a medium shot (waist-up, person filling roughly half the frame). Keep the attire simple and everyday: for men, a plain beige cotton kurta with loose cream cotton trousers; for women, a plain beige cotton kurta with matching cotton palazzo trousers. Match the skin lighting to the soft cool filtered forest light.',
+        backgroundUrl: 'assets/backgrounds/kheoni wildlife sanctuary 1.jpg'
     }
 ];
 
-// Initialize the application
+// ═══════════════════════════════════════════════════════════════
+//  Initialisation
+// ═══════════════════════════════════════════════════════════════
+
 function init() {
-    loadPresets();
-    attachEventListeners();
-    checkServerHealth();
+    renderDestinations();
+    wireEvents();
+    loadCameraDevices();
+    checkHealth();
+    if (el.yearSpan) el.yearSpan.textContent = new Date().getFullYear();
 }
 
-// Check server health and API status
-async function checkServerHealth() {
+async function checkHealth() {
     try {
-        const response = await fetch('/api/health');
-        const data = await response.json();
-
+        const r = await fetch('/api/health');
+        const data = await r.json();
         if (!data.apiKeyConfigured) {
-            showStatus('API key not configured. Using mock mode for testing.', 'error', 5000);
+            toast('Running in mock mode — no API key configured.', 'error', 5000);
         }
-    } catch (error) {
-        console.error('Server health check failed:', error);
+    } catch (_) { /* silent; user will see failures when they generate */ }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  Step navigation
+// ═══════════════════════════════════════════════════════════════
+
+function goToStep(n) {
+    state.step = n;
+
+    // Sections
+    el.stepSections.forEach(section => {
+        const thisStep = Number(section.dataset.step);
+        section.hidden = (thisStep !== n);
+    });
+
+    // Stepper
+    el.stepperItems.forEach(item => {
+        const thisStep = Number(item.dataset.step);
+        item.classList.toggle('is-active', thisStep === n);
+        item.classList.toggle('is-done', thisStep < n);
+    });
+
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  Step 1: Camera & capture
+// ═══════════════════════════════════════════════════════════════
+
+async function loadCameraDevices() {
+    if (!navigator.mediaDevices?.enumerateDevices) return;
+    try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        state.cameraDevices = devices.filter(d => d.kind === 'videoinput');
+        populateCameraSelect();
+    } catch (err) {
+        console.error('Failed to enumerate cameras:', err);
     }
 }
 
-// Load presets into the grid
-function loadPresets() {
-    presetsGrid.innerHTML = '';
-
-    presets.forEach(preset => {
-        const presetCard = document.createElement('div');
-        presetCard.className = 'preset-card';
-        presetCard.dataset.presetId = preset.id;
-
-        presetCard.innerHTML = `
-            <img src="${preset.backgroundUrl}" alt="${preset.name}" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22400%22 height=%22300%22%3E%3Crect fill=%22%23667eea%22 width=%22400%22 height=%22300%22/%3E%3Ctext x=%2250%25%22 y=%2250%25%22 dominant-baseline=%22middle%22 text-anchor=%22middle%22 font-family=%22Arial%22 font-size=%2224%22 fill=%22white%22%3E${preset.name}%3C/text%3E%3C/svg%3E'">
-            <div class="preset-overlay">
-                <h4>${preset.name}</h4>
-                <p>${preset.description}</p>
-            </div>
-        `;
-
-        presetCard.addEventListener('click', () => selectPreset(preset));
-        presetsGrid.appendChild(presetCard);
+function populateCameraSelect() {
+    el.cameraSelect.innerHTML = '<option value="">Default camera</option>';
+    state.cameraDevices.forEach((d, i) => {
+        const opt = document.createElement('option');
+        opt.value = d.deviceId;
+        opt.textContent = d.label || `Camera ${i + 1}`;
+        el.cameraSelect.appendChild(opt);
     });
+    // Only show the source selector when there are multiple cameras
+    el.cameraSourceField.hidden = state.cameraDevices.length < 2;
 }
 
-// Select a preset
-function selectPreset(preset) {
-    selectedPreset = preset;
-
-    // Update UI
-    document.querySelectorAll('.preset-card').forEach(card => {
-        card.classList.remove('selected');
-    });
-
-    const selectedCard = document.querySelector(`[data-preset-id="${preset.id}"]`);
-    if (selectedCard) {
-        selectedCard.classList.add('selected');
-    }
-
-    // Show preset info
-    presetName.textContent = preset.name;
-    presetDescription.textContent = preset.description;
-    selectedPresetInfo.style.display = 'block';
-
-    // Enable generate button if image is captured
-    updateGenerateButton();
-
-    showStatus(`Selected: ${preset.name}`, 'success');
+function stopStream() {
+    if (!state.stream) return;
+    state.stream.getTracks().forEach(t => t.stop());
+    state.stream = null;
 }
 
-// Attach event listeners
-function attachEventListeners() {
-    startCameraBtn.addEventListener('click', startCamera);
-    captureBtn.addEventListener('click', capturePhoto);
-    retakeBtn.addEventListener('click', retakePhoto);
-    generateBtn.addEventListener('click', generateAIImage);
-    printBtn.addEventListener('click', printImage);
-    newPhotoBtn.addEventListener('click', resetApp);
-}
-
-// Start camera
 async function startCamera() {
     try {
-        stream = await navigator.mediaDevices.getUserMedia({
-            video: {
-                width: { ideal: 1920 },
-                height: { ideal: 1080 },
-                facingMode: 'user'
-            },
-            audio: false
-        });
+        stopStream();
+        const deviceId = el.cameraSelect.value;
+        const video = deviceId
+            ? { deviceId: { exact: deviceId }, width: { ideal: 1920 }, height: { ideal: 1080 } }
+            : { facingMode: 'user', width: { ideal: 1920 }, height: { ideal: 1080 } };
 
-        webcam.srcObject = stream;
-        webcam.classList.add('active');
-        cameraPlaceholder.style.display = 'none';
+        state.stream = await navigator.mediaDevices.getUserMedia({ video, audio: false });
+        el.webcam.srcObject = state.stream;
 
-        startCameraBtn.disabled = true;
-        captureBtn.disabled = false;
+        el.cameraPlaceholder.hidden = true;
+        el.captureControls.hidden = false;
+        el.captureView.dataset.state = 'live';
+        el.captureBtn.disabled = false;
 
-        showStatus('Camera started successfully!', 'success');
-    } catch (error) {
-        console.error('Error accessing camera:', error);
-        showStatus('Failed to access camera. Please check permissions.', 'error');
+        // Refresh labels (only available after permission granted)
+        await loadCameraDevices();
+    } catch (err) {
+        console.error('Camera error:', err);
+        toast('Could not access the camera. Check permissions.', 'error');
     }
 }
 
-// Capture photo
+async function handleCameraChange() {
+    if (!state.stream) return;
+    await startCamera();
+    toast('Camera switched.', 'success');
+}
+
 function capturePhoto() {
-    const context = canvas.getContext('2d');
-    canvas.width = webcam.videoWidth;
-    canvas.height = webcam.videoHeight;
+    const ctx = el.canvas.getContext('2d');
+    el.canvas.width = el.webcam.videoWidth;
+    el.canvas.height = el.webcam.videoHeight;
 
-    context.drawImage(webcam, 0, 0, canvas.width, canvas.height);
+    // Mirror horizontally to match the preview, so the saved shot matches what
+    // the user saw when they hit the shutter.
+    ctx.save();
+    ctx.translate(el.canvas.width, 0);
+    ctx.scale(-1, 1);
+    ctx.drawImage(el.webcam, 0, 0, el.canvas.width, el.canvas.height);
+    ctx.restore();
 
-    canvas.toBlob(blob => {
-        capturedImageBlob = blob;
-        capturedImage.src = URL.createObjectURL(blob);
-        capturedImageContainer.style.display = 'block';
+    el.canvas.toBlob(blob => {
+        if (!blob) { toast('Capture failed. Try again.', 'error'); return; }
+        state.capturedBlob = blob;
+        if (state.capturedUrl) URL.revokeObjectURL(state.capturedUrl);
+        state.capturedUrl = URL.createObjectURL(blob);
+        el.capturedImage.src = state.capturedUrl;
 
-        updateGenerateButton();
-        showStatus('Photo captured!', 'success');
+        // Flip to review state
+        el.captureView.hidden = true;
+        el.captureReview.hidden = false;
     }, 'image/jpeg', 0.95);
 }
 
-// Retake photo
 function retakePhoto() {
-    capturedImageBlob = null;
-    capturedImageContainer.style.display = 'none';
-    updateGenerateButton();
+    state.capturedBlob = null;
+    if (state.capturedUrl) { URL.revokeObjectURL(state.capturedUrl); state.capturedUrl = null; }
+    el.captureReview.hidden = true;
+    el.captureView.hidden = false;
 }
 
-// Update generate button state
-function updateGenerateButton() {
-    generateBtn.disabled = !(capturedImageBlob && selectedPreset);
+function confirmCaptureAndAdvance() {
+    if (!state.capturedBlob) return;
+    if (state.capturedUrl) el.contextPhoto.src = state.capturedUrl;
+    goToStep(2);
 }
 
-// Generate AI image
-async function generateAIImage() {
-    if (!capturedImageBlob || !selectedPreset) {
-        showStatus('Please capture a photo and select a preset', 'error');
+// ═══════════════════════════════════════════════════════════════
+//  Step 2: Destinations
+// ═══════════════════════════════════════════════════════════════
+
+function renderDestinations() {
+    const frag = document.createDocumentFragment();
+    presets.forEach(p => {
+        const card = document.createElement('button');
+        card.type = 'button';
+        card.className = 'destination-card';
+        card.setAttribute('role', 'radio');
+        card.setAttribute('aria-checked', 'false');
+        card.dataset.presetId = p.id;
+        card.innerHTML = `
+            <div class="destination-card__media">
+                <img src="${p.backgroundUrl}" alt="" loading="lazy" />
+            </div>
+            <div class="destination-card__check" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path fill="currentColor" d="m9.55 17.575-4.95-4.95 1.414-1.414 3.536 3.536 7.07-7.071 1.415 1.414-8.485 8.485Z"/></svg>
+            </div>
+            <div class="destination-card__overlay">
+                <div class="destination-card__name">${escapeHtml(p.name)}</div>
+                <div class="destination-card__desc">${escapeHtml(p.description)}</div>
+            </div>`;
+        card.addEventListener('click', () => selectDestination(p, card));
+        frag.appendChild(card);
+    });
+    el.presetsGrid.innerHTML = '';
+    el.presetsGrid.appendChild(frag);
+}
+
+function selectDestination(preset, cardEl) {
+    state.selectedPreset = preset;
+    el.presetsGrid.querySelectorAll('.destination-card').forEach(c => {
+        const isSel = c === cardEl;
+        c.classList.toggle('is-selected', isSel);
+        c.setAttribute('aria-checked', isSel ? 'true' : 'false');
+    });
+    el.selectedDestName.textContent = preset.name;
+    el.generateBtn.disabled = false;
+}
+
+function escapeHtml(s) {
+    return s.replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  Step 3: Generation
+// ═══════════════════════════════════════════════════════════════
+
+async function compressImage(blob, quality = 0.9, maxWidth = 1600) {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => {
+            let { width, height } = img;
+            if (width > maxWidth) {
+                height = Math.round((height * maxWidth) / width);
+                width = maxWidth;
+            }
+            const c = document.createElement('canvas');
+            c.width = width; c.height = height;
+            c.getContext('2d').drawImage(img, 0, 0, width, height);
+            c.toBlob(b => b ? resolve(b) : reject(new Error('Compression failed')), 'image/jpeg', quality);
+        };
+        img.onerror = () => reject(new Error('Image load failed'));
+        img.src = URL.createObjectURL(blob);
+    });
+}
+
+const SCENE_HINTS = [
+    'Painting the heritage scene…',
+    'Dressing you in traditional attire…',
+    'Aligning shadows and perspective…',
+];
+const SWAP_HINTS = [
+    'Locking in your face with pixel accuracy…',
+    'Blending skin tone and lighting…',
+    'Final touches…',
+];
+let loadingHintTimer = null;
+function cycleHints(hints) {
+    stopLoadingHints();
+    let i = 0;
+    el.loadingHint.textContent = hints[0];
+    loadingHintTimer = setInterval(() => {
+        i = (i + 1) % hints.length;
+        el.loadingHint.textContent = hints[i];
+    }, 4500);
+}
+function stopLoadingHints() {
+    clearInterval(loadingHintTimer);
+    loadingHintTimer = null;
+}
+
+async function generate() {
+    if (!state.capturedBlob || !state.selectedPreset) {
+        toast('Please capture a photo and pick a destination.', 'error');
         return;
     }
 
+    goToStep(3);
+    el.loadingState.hidden = false;
+    el.resultPanel.hidden = true;
+    cycleHints(SCENE_HINTS);
+
     try {
-        // Show loading state
-        loadingState.style.display = 'block';
-        generateBtn.disabled = true;
+        // Stage 1 — scene generation via Gemini.
+        // Reference photo only informs age/gender/complexion now, so a
+        // modest 1280px compression is plenty.
+        const userImg = await compressImage(state.capturedBlob, 0.9, 1280);
 
-        // Prepare form data
-        const formData = new FormData();
-        formData.append('userImage', capturedImageBlob, 'photo.jpg');
-        formData.append('prompt', selectedPreset.prompt);
+        const genForm = new FormData();
+        genForm.append('userImage', userImg, 'photo.jpg');
+        genForm.append('prompt', state.selectedPreset.prompt);
 
-        // Fetch background image if available
         try {
-            const bgResponse = await fetch(selectedPreset.backgroundUrl);
-            if (bgResponse.ok) {
-                const bgBlob = await bgResponse.blob();
-                formData.append('backgroundImage', bgBlob, 'background.jpg');
+            const bgRes = await fetch(state.selectedPreset.backgroundUrl);
+            if (bgRes.ok) {
+                const bgBlob = await bgRes.blob();
+                const bgCompressed = await compressImage(bgBlob, 0.6, 1280);
+                genForm.append('backgroundImage', bgCompressed, 'bg.jpg');
             }
-        } catch (error) {
-            console.log('Background image not available, proceeding without it');
+        } catch (e) {
+            console.warn('Background fetch failed; continuing without it.');
         }
 
-        showStatus('Creating your masterpiece with Gemini AI... This may take 15-30 seconds.', 'success', 60000);
-
-        // Single request to Gemini — no polling needed
-        const response = await fetch('/api/generate', {
-            method: 'POST',
-            body: formData
-        });
-
-        const data = await response.json();
-
-        if (!response.ok || !data.success) {
-            throw new Error(data.details || data.error || 'Failed to generate image');
+        const genRes = await fetch('/api/generate', { method: 'POST', body: genForm });
+        const genData = await genRes.json();
+        if (!genRes.ok || !genData.success) {
+            throw new Error(genData.details || genData.error || 'Scene generation failed');
         }
 
-        // Display generated image
-        const imageData = `data:${data.mimeType};base64,${data.generatedImage}`;
-        generatedImage.src = imageData;
-
-        resultPanel.style.display = 'block';
-        resultPanel.scrollIntoView({ behavior: 'smooth' });
-
-        if (data.note) {
-            showStatus(data.note, 'error', 8000);
+        // Stage 2 — face swap. Source = webcam face, target = Gemini scene.
+        // On mock mode (no GEMINI_API_KEY), genData.generatedImage is the
+        // original webcam photo; skip the swap and just show it.
+        let finalDataUrl;
+        if (genData.note) {
+            finalDataUrl = `data:${genData.mimeType};base64,${genData.generatedImage}`;
+            toast(genData.note, 'error', 6000);
         } else {
-            showStatus('Image generated successfully!', 'success');
+            cycleHints(SWAP_HINTS);
+
+            const sceneBlob = await (await fetch(`data:${genData.mimeType};base64,${genData.generatedImage}`)).blob();
+
+            // Higher-res source face gives the swap model more identity detail.
+            const sourceFace = await compressImage(state.capturedBlob, 0.95, 2048);
+
+            const swapForm = new FormData();
+            swapForm.append('sourceImage', sourceFace, 'face.jpg');
+            swapForm.append('targetImage', sceneBlob, 'scene.jpg');
+
+            const swapRes = await fetch('/api/faceswap', { method: 'POST', body: swapForm });
+            const swapData = await swapRes.json();
+            if (!swapRes.ok || !swapData.success) {
+                throw new Error(swapData.details || swapData.error || 'Face swap failed');
+            }
+
+            finalDataUrl = `data:${swapData.mimeType};base64,${swapData.generatedImage}`;
+            if (swapData.note) toast(swapData.note, 'error', 6000);
+            else toast('Your photo is ready!', 'success');
         }
 
-    } catch (error) {
-        console.error('Error generating image:', error);
-        showStatus(error.message || 'Failed to generate image. Please try again.', 'error');
+        el.generatedImage.src = finalDataUrl;
+        el.resultLocation.textContent = state.selectedPreset.name;
+        el.loadingState.hidden = true;
+        el.resultPanel.hidden = false;
+    } catch (err) {
+        console.error(err);
+        toast(err.message || 'Generation failed. Please try again.', 'error', 6000);
+        // On failure, return to step 2 so the user can retry
+        el.loadingState.hidden = true;
+        goToStep(2);
     } finally {
-        loadingState.style.display = 'none';
-        generateBtn.disabled = false;
+        stopLoadingHints();
     }
 }
 
-// Print image
-function printImage() {
-    window.print();
+function download() {
+    if (!el.generatedImage.src) return;
+    const a = document.createElement('a');
+    a.href = el.generatedImage.src;
+    const safeName = (state.selectedPreset?.name || 'photobooth').replace(/[^\w-]+/g, '_');
+    a.download = `${safeName}-${Date.now()}.jpg`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
 }
 
-// Reset app for new photo
-function resetApp() {
-    capturedImageBlob = null;
-    selectedPreset = null;
+// Share to WhatsApp via the Web Share API (mobile — opens the native share
+// sheet where the user picks WhatsApp). On desktop, falls back to opening
+// WhatsApp Web with a prefilled text message and triggers a download so the
+// user can attach it manually, since wa.me URLs can't carry image payloads.
+async function shareWhatsApp() {
+    if (!el.generatedImage.src) return;
+    const locationName = state.selectedPreset?.name || 'the AI Photobooth';
+    const caption = `Here I am at ${locationName} — via the AI Photobooth!`;
 
-    capturedImageContainer.style.display = 'none';
-    selectedPresetInfo.style.display = 'none';
-    resultPanel.style.display = 'none';
+    try {
+        const response = await fetch(el.generatedImage.src);
+        const blob = await response.blob();
+        const file = new File([blob], `photobooth-${Date.now()}.jpg`, { type: blob.type || 'image/jpeg' });
 
-    document.querySelectorAll('.preset-card').forEach(card => {
-        card.classList.remove('selected');
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            await navigator.share({ files: [file], title: 'AI Photobooth', text: caption });
+            return;
+        }
+
+        // Desktop fallback — trigger a download and open WhatsApp Web with text.
+        download();
+        const url = `https://web.whatsapp.com/send?text=${encodeURIComponent(caption)}`;
+        window.open(url, '_blank');
+        toast('Image downloaded. Attach it in the WhatsApp window that just opened.', '', 5500);
+    } catch (err) {
+        if (err.name === 'AbortError') return; // user dismissed the share sheet
+        console.error('WhatsApp share failed:', err);
+        toast('Share failed — try downloading and sending manually.', 'error');
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  Reset
+// ═══════════════════════════════════════════════════════════════
+
+function resetAll() {
+    retakePhoto();
+    state.selectedPreset = null;
+    el.presetsGrid.querySelectorAll('.destination-card').forEach(c => {
+        c.classList.remove('is-selected');
+        c.setAttribute('aria-checked', 'false');
+    });
+    el.selectedDestName.textContent = 'Nothing yet';
+    el.generateBtn.disabled = true;
+    goToStep(1);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  Toast
+// ═══════════════════════════════════════════════════════════════
+
+let toastTimer = null;
+function toast(message, type = '', duration = 3200) {
+    el.toast.textContent = message;
+    el.toast.className = 'toast is-visible' + (type ? ` is-${type}` : '');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.toast.classList.remove('is-visible'), duration);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  Events
+// ═══════════════════════════════════════════════════════════════
+
+function wireEvents() {
+    el.startCameraBtn.addEventListener('click', startCamera);
+    el.cameraSelect.addEventListener('change', handleCameraChange);
+    el.captureBtn.addEventListener('click', capturePhoto);
+    el.retakeBtn.addEventListener('click', retakePhoto);
+    el.toStep2Btn.addEventListener('click', confirmCaptureAndAdvance);
+
+    el.editPhotoBtn.addEventListener('click', () => {
+        retakePhoto();
+        goToStep(1);
     });
 
-    updateGenerateButton();
+    el.generateBtn.addEventListener('click', generate);
 
-    // Scroll to top
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-
-    showStatus('Ready for new photo!', 'success');
+    el.newPhotoBtn.addEventListener('click', resetAll);
+    el.downloadBtn.addEventListener('click', download);
+    el.shareWhatsAppBtn.addEventListener('click', shareWhatsApp);
+    el.printBtn.addEventListener('click', () => window.print());
 }
 
-// Show status message
-function showStatus(message, type = 'success', duration = 3000) {
-    statusMessage.textContent = message;
-    statusMessage.className = `status-message ${type} show`;
-
-    setTimeout(() => {
-        statusMessage.classList.remove('show');
-    }, duration);
-}
-
-// Initialize app when DOM is ready
+// Boot
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
 } else {
