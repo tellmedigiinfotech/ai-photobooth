@@ -606,64 +606,6 @@ p { margin: 0; color: var(--c-ink-soft); }
     min-height: 0;
 }
 
-.gender-picker {
-    border: 0;
-    padding: 0;
-    margin: 0;
-    width: 100%;
-    max-width: 520px;
-    display: flex;
-    flex-direction: column;
-    gap: var(--s-3);
-    align-items: center;
-}
-.gender-picker__legend {
-    font-size: 0.92rem;
-    font-weight: 500;
-    color: var(--c-ink-soft);
-    padding: 0;
-    margin: 0;
-}
-.gender-picker__options {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: var(--s-3);
-    width: 100%;
-}
-.gender-picker__option {
-    position: relative;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: var(--s-3) var(--s-4);
-    min-height: 52px;
-    background: var(--c-surface);
-    border: 2px solid var(--c-border);
-    border-radius: var(--r-md);
-    font-weight: 500;
-    color: var(--c-ink);
-    cursor: pointer;
-    transition: border-color var(--t-fast) var(--ease), background var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
-}
-.gender-picker__option:hover {
-    border-color: var(--c-border-strong);
-}
-.gender-picker__option input {
-    position: absolute;
-    opacity: 0;
-    pointer-events: none;
-}
-.gender-picker__option:has(input:checked) {
-    border-color: var(--c-accent);
-    background: var(--c-accent);
-    color: #fff;
-    box-shadow: var(--sh-1);
-}
-.gender-picker__option:focus-within {
-    outline: 2px solid var(--c-accent-soft);
-    outline-offset: 2px;
-}
-
 .button-row {
     display: flex;
     justify-content: center;
