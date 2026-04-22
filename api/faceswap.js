@@ -25,6 +25,27 @@ async function streamToBuffer(stream) {
     return Buffer.concat(chunks);
 }
 
+// Replicate SDK returns URL string | URL[] | FileOutput stream | object with .url().
+// Normalise to an accessible URL.
+async function normaliseOutputToUrl(output) {
+    const first = Array.isArray(output) ? output[0] : output;
+    if (!first) return null;
+    if (typeof first === "string") return first;
+    if (typeof first.url === "function") {
+        const u = first.url();
+        return typeof u === "string" ? u : u?.toString?.();
+    }
+    return null;
+}
+
+async function downloadAsBuffer(url) {
+    const fetchRes = await fetch(url);
+    if (!fetchRes.ok) throw new Error(`Download failed: ${fetchRes.status}`);
+    const mime = fetchRes.headers.get("content-type") || "image/jpeg";
+    const buf = Buffer.from(await fetchRes.arrayBuffer());
+    return { buf, mime };
+}
+
 module.exports = async function handler(req, res) {
     if (req.method !== "POST") {
         return res.status(405).json({ error: "Method not allowed" });
@@ -55,11 +76,14 @@ module.exports = async function handler(req, res) {
             });
         }
 
-        console.log("Starting face swap via Replicate...");
-
         const replicate = new Replicate({ auth: token });
 
-        const output = await replicate.run(
+        // Stage A — identity transfer. cdingram uses InsightFace inswapper_128
+        // under the hood, which produces a sharp-but-blurry 128×128 face crop
+        // pasted into the target. The output identity is correct but facial
+        // detail can look soft, especially in small faces.
+        console.log("Face swap: cdingram/face-swap...");
+        const swapOutput = await replicate.run(
             "cdingram/face-swap:d1d6ea8c8be89d664a07a457526f7128109dee7030fdac424788d762c71ed111",
             {
                 input: {
@@ -69,40 +93,50 @@ module.exports = async function handler(req, res) {
             }
         );
 
-        // Replicate JS client returns either a URL string, an array of URLs,
-        // or a ReadableStream (FileOutput) depending on the model + version.
-        let resultBuffer = null;
-        let resultMime = "image/jpeg";
+        const swappedUrl = await normaliseOutputToUrl(swapOutput);
+        if (!swappedUrl) throw new Error("Face-swap returned no output");
+        console.log("✅ Swap done:", swappedUrl);
 
-        const first = Array.isArray(output) ? output[0] : output;
-
-        if (!first) {
-            throw new Error("Face-swap returned no output");
+        // Stage B — face restoration. Pipes the swapped image through
+        // CodeFormer with a high fidelity setting (0.8) — prioritises
+        // preserving the identity transferred by Stage A while sharpening
+        // skin texture, eyes, hairline, and mouth detail. Result reads as the
+        // actual person rather than a soft approximation. background_enhance
+        // is off so the heritage monument pixels are not re-rendered.
+        let finalUrl = swappedUrl;
+        try {
+            console.log("Face restore: sczhou/codeformer...");
+            const restoreOutput = await replicate.run(
+                "sczhou/codeformer:cc4956dd26fa5a7185d5660cc9100fab1b8070a1d1654a8bb5eb6d443b020bb2",
+                {
+                    input: {
+                        image: swappedUrl,
+                        codeformer_fidelity: 0.8,
+                        background_enhance: false,
+                        face_upsample: true,
+                        upscale: 1,
+                    },
+                }
+            );
+            const restoredUrl = await normaliseOutputToUrl(restoreOutput);
+            if (restoredUrl) {
+                finalUrl = restoredUrl;
+                console.log("✅ Restore done:", restoredUrl);
+            } else {
+                console.warn("CodeFormer returned no URL — using swap output");
+            }
+        } catch (restoreErr) {
+            // Never let restoration failure break the request — fall back to
+            // the raw swap output.
+            console.warn("CodeFormer failed, using swap-only output:", restoreErr.message);
         }
 
-        if (typeof first === "string") {
-            const fetchRes = await fetch(first);
-            if (!fetchRes.ok) throw new Error(`Download failed: ${fetchRes.status}`);
-            resultMime = fetchRes.headers.get("content-type") || resultMime;
-            resultBuffer = Buffer.from(await fetchRes.arrayBuffer());
-        } else if (typeof first.url === "function") {
-            const url = first.url();
-            const fetchRes = await fetch(url);
-            if (!fetchRes.ok) throw new Error(`Download failed: ${fetchRes.status}`);
-            resultMime = fetchRes.headers.get("content-type") || resultMime;
-            resultBuffer = Buffer.from(await fetchRes.arrayBuffer());
-        } else if (first.getReader || first[Symbol.asyncIterator]) {
-            resultBuffer = await streamToBuffer(first);
-        } else {
-            throw new Error("Unexpected Replicate output shape");
-        }
-
-        console.log("✅ Face swap complete!");
+        const { buf, mime } = await downloadAsBuffer(finalUrl);
 
         return res.json({
             success: true,
-            generatedImage: resultBuffer.toString("base64"),
-            mimeType: resultMime,
+            generatedImage: buf.toString("base64"),
+            mimeType: mime,
         });
     } catch (error) {
         console.error("❌ Face swap error:", error.message);
