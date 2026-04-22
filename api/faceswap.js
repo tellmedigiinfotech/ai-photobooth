@@ -19,14 +19,7 @@ function bufferToDataUrl(buffer, mimeType) {
     return `data:${mimeType || "image/jpeg"};base64,${buffer.toString("base64")}`;
 }
 
-async function streamToBuffer(stream) {
-    const chunks = [];
-    for await (const chunk of stream) chunks.push(chunk);
-    return Buffer.concat(chunks);
-}
-
 // Replicate SDK returns URL string | URL[] | FileOutput stream | object with .url().
-// Normalise to an accessible URL.
 async function normaliseOutputToUrl(output) {
     const first = Array.isArray(output) ? output[0] : output;
     if (!first) return null;
@@ -54,11 +47,13 @@ module.exports = async function handler(req, res) {
     try {
         await runMulter(req, res);
 
+        const { prompt: scenePrompt } = req.body;
+
         const fileByField = {};
         for (const f of req.files || []) fileByField[f.fieldname] = f;
 
-        const sourceImage = fileByField["sourceImage"];
-        const targetImage = fileByField["targetImage"];
+        const sourceImage = fileByField["sourceImage"]; // webcam face
+        const targetImage = fileByField["targetImage"]; // Gemini scene
 
         if (!sourceImage || !targetImage) {
             return res.status(400).json({
@@ -78,58 +73,53 @@ module.exports = async function handler(req, res) {
 
         const replicate = new Replicate({ auth: token });
 
-        // Stage A — identity transfer. cdingram uses InsightFace inswapper_128
-        // under the hood, which produces a sharp-but-blurry 128×128 face crop
-        // pasted into the target. The output identity is correct but facial
-        // detail can look soft, especially in small faces.
-        console.log("Face swap: cdingram/face-swap...");
-        const swapOutput = await replicate.run(
-            "cdingram/face-swap:d1d6ea8c8be89d664a07a457526f7128109dee7030fdac424788d762c71ed111",
+        // InstantID (SDXL + IdentityNet + IP-Adapter) — single-model identity
+        // swap with dramatically better fidelity than InsightFace inswapper_128.
+        // We pass the Gemini scene as pose_image + enable depth ControlNet so
+        // composition (pose, framing, rough scene layout) is preserved while
+        // the person is regenerated with the user's actual face identity.
+        //
+        // Tuning rationale:
+        // - controlnet_conditioning_scale 0.9: strong IdentityNet — face must match.
+        // - ip_adapter_scale 0.85: detailed identity features (moles, eye shape).
+        // - pose_strength 0.5: preserve head+body pose from Gemini scene.
+        // - enable_depth_controlnet + depth_strength 0.55: preserve scene
+        //   composition/framing so the heritage monument still reads.
+        // - 30 inference steps: quality over speed (still ~12-15s end-to-end).
+        const promptText = (scenePrompt && scenePrompt.trim()) ||
+            "a photorealistic portrait photograph of a person at a heritage location, natural lighting, sharp focus, authentic cultural attire, medium shot from the waist up";
+
+        const negativePrompt = "cartoon, anime, painting, illustration, 3d render, plastic skin, over-smoothed, blurry face, distorted face, extra limbs, deformed, low quality, watermark, text, signature";
+
+        console.log("InstantID face swap...");
+        const output = await replicate.run(
+            "zsxkib/instant-id:2e4785a4d80dadf580077b2244c8d7c05d8e3faac04a04c02d8e099dd2876789",
             {
                 input: {
-                    swap_image: bufferToDataUrl(sourceImage.buffer, sourceImage.mimetype),
-                    input_image: bufferToDataUrl(targetImage.buffer, targetImage.mimetype),
+                    image: bufferToDataUrl(sourceImage.buffer, sourceImage.mimetype),
+                    pose_image: bufferToDataUrl(targetImage.buffer, targetImage.mimetype),
+                    prompt: promptText,
+                    negative_prompt: negativePrompt,
+                    controlnet_conditioning_scale: 0.9,
+                    ip_adapter_scale: 0.85,
+                    enable_pose_controlnet: true,
+                    pose_strength: 0.5,
+                    enable_depth_controlnet: true,
+                    depth_strength: 0.55,
+                    enable_canny_controlnet: false,
+                    guidance_scale: 5.5,
+                    num_inference_steps: 30,
+                    output_format: "png",
+                    output_quality: 95,
+                    enhance_nonface_region: true,
                 },
             }
         );
 
-        const swappedUrl = await normaliseOutputToUrl(swapOutput);
-        if (!swappedUrl) throw new Error("Face-swap returned no output");
-        console.log("✅ Swap done:", swappedUrl);
+        const finalUrl = await normaliseOutputToUrl(output);
+        if (!finalUrl) throw new Error("InstantID returned no output");
 
-        // Stage B — face restoration. Pipes the swapped image through
-        // CodeFormer with a high fidelity setting (0.8) — prioritises
-        // preserving the identity transferred by Stage A while sharpening
-        // skin texture, eyes, hairline, and mouth detail. Result reads as the
-        // actual person rather than a soft approximation. background_enhance
-        // is off so the heritage monument pixels are not re-rendered.
-        let finalUrl = swappedUrl;
-        try {
-            console.log("Face restore: sczhou/codeformer...");
-            const restoreOutput = await replicate.run(
-                "sczhou/codeformer:cc4956dd26fa5a7185d5660cc9100fab1b8070a1d1654a8bb5eb6d443b020bb2",
-                {
-                    input: {
-                        image: swappedUrl,
-                        codeformer_fidelity: 0.8,
-                        background_enhance: false,
-                        face_upsample: true,
-                        upscale: 1,
-                    },
-                }
-            );
-            const restoredUrl = await normaliseOutputToUrl(restoreOutput);
-            if (restoredUrl) {
-                finalUrl = restoredUrl;
-                console.log("✅ Restore done:", restoredUrl);
-            } else {
-                console.warn("CodeFormer returned no URL — using swap output");
-            }
-        } catch (restoreErr) {
-            // Never let restoration failure break the request — fall back to
-            // the raw swap output.
-            console.warn("CodeFormer failed, using swap-only output:", restoreErr.message);
-        }
+        console.log("✅ InstantID done:", finalUrl);
 
         const { buf, mime } = await downloadAsBuffer(finalUrl);
 

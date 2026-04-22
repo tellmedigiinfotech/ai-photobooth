@@ -453,6 +453,7 @@ async function generate() {
             const swapForm = new FormData();
             swapForm.append('sourceImage', sourceFace, 'face.jpg');
             swapForm.append('targetImage', sceneBlob, 'scene.jpg');
+            swapForm.append('prompt', state.selectedPreset.prompt);
 
             const swapRes = await fetch('/api/faceswap', { method: 'POST', body: swapForm });
             const swapData = await swapRes.json();
