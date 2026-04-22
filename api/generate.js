@@ -23,7 +23,7 @@ module.exports = async function handler(req, res) {
     try {
         await runMulter(req, res);
 
-        const { prompt } = req.body;
+        const { prompt, gender: rawGender } = req.body;
 
         const fileByField = {};
         for (const f of req.files || []) fileByField[f.fieldname] = f;
@@ -37,6 +37,13 @@ module.exports = async function handler(req, res) {
         if (!prompt) {
             return res.status(400).json({ error: "Prompt is required" });
         }
+
+        const gender = rawGender === "female" ? "female" : rawGender === "male" ? "male" : null;
+        if (!gender) {
+            return res.status(400).json({ error: "Gender (male|female) is required" });
+        }
+        const attireWord = gender === "male" ? "men" : "women";
+        const oppositeAttireWord = gender === "male" ? "women" : "men";
 
         const apiKey = process.env.GEMINI_API_KEY;
         if (!apiKey) {
@@ -54,10 +61,16 @@ module.exports = async function handler(req, res) {
 
         // Identity preservation is handled by a separate face-swap stage
         // downstream, so Gemini only needs to produce a plausible scene:
-        // correct background (unchanged), correct attire, correct framing,
-        // and a generic person whose face will be overwritten.
+        // correct background (unchanged), correct gender, correct attire,
+        // correct framing. Gender is passed explicitly from the UI to
+        // eliminate the guess-the-gender-from-the-reference-face failure mode.
         const systemPrompt = [
-            `TASK: Insert a person into the provided heritage-location background photograph, dressed in the specified cultural attire.`,
+            `TASK: Insert a ${gender.toUpperCase()} person into the provided heritage-location background photograph, dressed in the specified cultural attire.`,
+            ``,
+            `=================================================================`,
+            `RULE 0 — GENDER (NON-NEGOTIABLE)`,
+            `=================================================================`,
+            `THE SUBJECT IS ${gender.toUpperCase()}. Generate a ${gender} body with ${gender} attire, ${gender} hairstyle, and ${gender} proportions. Do NOT generate a ${oppositeAttireWord === "men" ? "male" : "female"} body under any circumstances — regardless of what the reference face looks like, regardless of what the scene description mentions about the other gender. In the scene description below, use ONLY the "for ${attireWord}" attire spec and IGNORE the "for ${oppositeAttireWord}" spec entirely.`,
             ``,
             `=================================================================`,
             `RULE 1 — THE BACKGROUND MUST BE THE EXACT IMAGE PROVIDED`,
@@ -90,7 +103,7 @@ module.exports = async function handler(req, res) {
             `=================================================================`,
             `RULE 4 — PERSON APPEARANCE`,
             `=================================================================`,
-            `Use the reference photo only to infer: approximate age range, gender presentation, skin tone, and hair style/length — so the generated person is broadly plausible as the same demographic. Exact facial identity does NOT need to be preserved; a downstream step handles that. Do not attempt a photorealistic face-copy — a generic, well-lit, front-facing face that roughly matches the reference's age/gender/complexion is sufficient.`,
+            `Gender is already specified above — it is ${gender.toUpperCase()}. Use the reference photo only to infer: approximate age range, skin tone, and hair style/length. Do NOT infer gender from the reference face — use the specified gender. Exact facial identity does NOT need to be preserved; a downstream step handles that. A generic, well-lit, front-facing ${gender} face that roughly matches the reference's age and complexion is sufficient.`,
         ].join("\n");
 
         const userImageData = {
@@ -117,10 +130,11 @@ module.exports = async function handler(req, res) {
         }
 
         contents.push({ text: `\n${systemPrompt}` });
-        contents.push({ text: `\nSCENE DESCRIPTION — follow the attire and accessories specified PRECISELY (while preserving the background exactly):\n${prompt}` });
+        contents.push({ text: `\nSCENE DESCRIPTION — use ONLY the "for ${attireWord}" attire spec, ignore the "for ${oppositeAttireWord}" spec, and preserve the background exactly:\n${prompt}` });
+        contents.push({ text: `\nFINAL REMINDER: The subject is ${gender.toUpperCase()}. Generate a ${gender} person in ${attireWord}'s attire. Do not generate a ${oppositeAttireWord === "men" ? "male" : "female"} body.` });
 
         const response = await ai.models.generateContent({
-            model: "gemini-2.5-flash-image",
+            model: "gemini-3-pro-image-preview",
             contents: contents,
             config: {
                 responseModalities: ["Image"],

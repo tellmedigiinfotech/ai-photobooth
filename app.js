@@ -9,6 +9,7 @@ const state = {
     stream: null,
     capturedBlob: null,
     capturedUrl: null,
+    gender: null,
     selectedPreset: null,
     cameraDevices: [],
 };
@@ -32,6 +33,7 @@ const el = {
     captureView:        document.querySelector('.capture-view'),
     captureReview:      $('captureReview'),
     capturedImage:      $('capturedImage'),
+    genderPicker:       $('genderPicker'),
     retakeBtn:          $('retakeBtn'),
     toStep2Btn:         $('toStep2Btn'),
 
@@ -287,18 +289,33 @@ function capturePhoto() {
         // Flip to review state
         el.captureView.hidden = true;
         el.captureReview.hidden = false;
+        updateToStep2Enabled();
     }, 'image/jpeg', 0.95);
 }
 
 function retakePhoto() {
     state.capturedBlob = null;
+    state.gender = null;
     if (state.capturedUrl) { URL.revokeObjectURL(state.capturedUrl); state.capturedUrl = null; }
     el.captureReview.hidden = true;
     el.captureView.hidden = false;
+    // Clear gender radios so the next capture starts fresh
+    el.genderPicker?.querySelectorAll('input[name="gender"]').forEach(r => { r.checked = false; });
+    updateToStep2Enabled();
+}
+
+function handleGenderChange(e) {
+    if (!e.target.matches('input[name="gender"]')) return;
+    state.gender = e.target.value;
+    updateToStep2Enabled();
+}
+
+function updateToStep2Enabled() {
+    el.toStep2Btn.disabled = !(state.capturedBlob && state.gender);
 }
 
 function confirmCaptureAndAdvance() {
-    if (!state.capturedBlob) return;
+    if (!state.capturedBlob || !state.gender) return;
     if (state.capturedUrl) el.contextPhoto.src = state.capturedUrl;
     goToStep(2);
 }
@@ -417,6 +434,7 @@ async function generate() {
         const genForm = new FormData();
         genForm.append('userImage', userImg, 'photo.jpg');
         genForm.append('prompt', state.selectedPreset.prompt);
+        genForm.append('gender', state.gender);
 
         try {
             const bgRes = await fetch(state.selectedPreset.backgroundUrl);
@@ -528,6 +546,8 @@ async function shareWhatsApp() {
 
 function resetAll() {
     retakePhoto();
+    state.gender = null;
+    el.genderPicker?.querySelectorAll('input[name="gender"]').forEach(r => { r.checked = false; });
     state.selectedPreset = null;
     el.presetsGrid.querySelectorAll('.destination-card').forEach(c => {
         c.classList.remove('is-selected');
@@ -560,6 +580,7 @@ function wireEvents() {
     el.captureBtn.addEventListener('click', capturePhoto);
     el.retakeBtn.addEventListener('click', retakePhoto);
     el.toStep2Btn.addEventListener('click', confirmCaptureAndAdvance);
+    el.genderPicker?.addEventListener('change', handleGenderChange);
 
     el.editPhotoBtn.addEventListener('click', () => {
         retakePhoto();
