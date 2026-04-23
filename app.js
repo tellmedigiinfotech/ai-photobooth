@@ -372,6 +372,47 @@ async function compressImage(blob, quality = 0.9, maxWidth = 1600) {
     });
 }
 
+function loadImageUrl(src) {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error(`Image load failed: ${src.slice(0, 60)}…`));
+        img.src = src;
+    });
+}
+
+// Composite a cut-out person PNG onto the heritage photograph. Heritage
+// photo is preserved pixel-perfect; the person is scaled to 72% of the
+// heritage photo's shorter dimension and placed bottom-centre so their feet
+// ground against the lower edge.
+async function compositePersonOnto(heritageUrl, personDataUrl) {
+    const [heritage, person] = await Promise.all([
+        loadImageUrl(heritageUrl),
+        loadImageUrl(personDataUrl),
+    ]);
+
+    const canvas = document.createElement('canvas');
+    canvas.width = heritage.naturalWidth;
+    canvas.height = heritage.naturalHeight;
+    const ctx = canvas.getContext('2d');
+
+    // 1. Draw the heritage photo as-is (untouched background requirement).
+    ctx.drawImage(heritage, 0, 0, canvas.width, canvas.height);
+
+    // 2. Scale the cut-out person to ~72% of the heritage image height and
+    //    place bottom-centre with a 3% margin from the bottom edge.
+    const targetHeight = canvas.height * 0.72;
+    const scale = targetHeight / person.naturalHeight;
+    const targetWidth = person.naturalWidth * scale;
+    const x = (canvas.width - targetWidth) / 2;
+    const y = canvas.height - targetHeight - canvas.height * 0.03;
+
+    ctx.drawImage(person, x, y, targetWidth, targetHeight);
+
+    return new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.95));
+}
+
 const LOADING_HINTS = [
     'Reading your face…',
     'Dressing you in traditional attire…',
@@ -405,11 +446,10 @@ async function generate() {
     startLoadingHints();
 
     try {
-        // Single call to /api/generate — the server handles face
-        // classification + FLUX-PuLID identity-preserving generation in one
-        // step. No more 2-stage Gemini scene + Replicate face-swap chain.
-        // Higher-res webcam capture gives PuLID more identity detail to lock
-        // onto, so we keep this at 2048px.
+        // /api/generate returns a cut-out RGBA PNG of the person (FLUX-PuLID
+        // + bria/remove-background). The heritage photograph is NEVER sent
+        // to the server — it's applied here via canvas compositing so the
+        // user's supplied background stays pixel-perfect.
         const userImg = await compressImage(state.capturedBlob, 0.95, 2048);
 
         const genForm = new FormData();
@@ -422,13 +462,25 @@ async function generate() {
             throw new Error(genData.details || genData.error || 'Generation failed');
         }
 
-        el.generatedImage.src = `data:${genData.mimeType};base64,${genData.generatedImage}`;
+        let finalDataUrl;
+        if (genData.note) {
+            // Mock-mode fallback: server returned the webcam photo unchanged.
+            finalDataUrl = `data:${genData.mimeType};base64,${genData.personImage || genData.generatedImage}`;
+            toast(genData.note, 'error', 6000);
+        } else {
+            const personDataUrl = `data:${genData.mimeType};base64,${genData.personImage}`;
+            const compositeBlob = await compositePersonOnto(
+                state.selectedPreset.backgroundUrl,
+                personDataUrl
+            );
+            finalDataUrl = URL.createObjectURL(compositeBlob);
+            toast('Your photo is ready!', 'success');
+        }
+
+        el.generatedImage.src = finalDataUrl;
         el.resultLocation.textContent = state.selectedPreset.name;
         el.loadingState.hidden = true;
         el.resultPanel.hidden = false;
-
-        if (genData.note) toast(genData.note, 'error', 6000);
-        else toast('Your photo is ready!', 'success');
     } catch (err) {
         console.error(err);
         toast(err.message || 'Generation failed. Please try again.', 'error', 6000);
