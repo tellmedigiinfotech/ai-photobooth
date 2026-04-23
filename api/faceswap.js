@@ -1,5 +1,6 @@
 const Replicate = require("replicate");
 const multer = require("multer");
+const { Readable } = require("stream");
 
 const upload = multer({
     storage: multer.memoryStorage(),
@@ -8,9 +9,23 @@ const upload = multer({
 
 function runMulter(req, res) {
     return new Promise((resolve, reject) => {
-        upload.any()(req, res, (err) => {
-            if (err) reject(err);
-            else resolve();
+        let streamReq = req;
+        if (Buffer.isBuffer(req.body)) {
+            const rebuilt = new Readable({ read() {} });
+            rebuilt.push(req.body);
+            rebuilt.push(null);
+            Object.assign(rebuilt, {
+                headers: req.headers,
+                method: req.method,
+                url: req.url,
+            });
+            streamReq = rebuilt;
+        }
+        upload.any()(streamReq, res, (err) => {
+            if (err) return reject(err);
+            req.files = streamReq.files;
+            req.body = streamReq.body;
+            resolve();
         });
     });
 }
@@ -137,8 +152,3 @@ module.exports = async function handler(req, res) {
     }
 };
 
-module.exports.config = {
-    api: {
-        bodyParser: false,
-    },
-};

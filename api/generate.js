@@ -1,17 +1,38 @@
 const { GoogleGenAI } = require("@google/genai");
 const Replicate = require("replicate");
 const multer = require("multer");
+const { Readable } = require("stream");
 
 const upload = multer({
     storage: multer.memoryStorage(),
     limits: { fileSize: 30 * 1024 * 1024 },
 });
 
+// Vercel's Node.js runtime buffers the raw request body into req.body as a
+// Buffer BEFORE the handler runs, leaving multer nothing to stream (hence
+// "Unexpected end of form"). When we detect a pre-buffered body, we rebuild
+// a Readable stream that mimics the IncomingMessage shape multer needs.
 function runMulter(req, res) {
     return new Promise((resolve, reject) => {
-        upload.any()(req, res, (err) => {
-            if (err) reject(err);
-            else resolve();
+        let streamReq = req;
+        if (Buffer.isBuffer(req.body)) {
+            const rebuilt = new Readable({ read() {} });
+            rebuilt.push(req.body);
+            rebuilt.push(null);
+            Object.assign(rebuilt, {
+                headers: req.headers,
+                method: req.method,
+                url: req.url,
+            });
+            streamReq = rebuilt;
+        }
+        upload.any()(streamReq, res, (err) => {
+            if (err) return reject(err);
+            // Multer attaches results to the stream object it processed —
+            // copy them back so the handler's req has them.
+            req.files = streamReq.files;
+            req.body = streamReq.body;
+            resolve();
         });
     });
 }
@@ -214,11 +235,3 @@ module.exports = async function handler(req, res) {
     }
 };
 
-// Tell Vercel's runtime NOT to pre-parse the multipart body — multer needs
-// the raw request stream. Without this, "Unexpected end of form" errors
-// surface once the runtime drains the body before multer sees it.
-module.exports.config = {
-    api: {
-        bodyParser: false,
-    },
-};
