@@ -372,24 +372,20 @@ async function compressImage(blob, quality = 0.9, maxWidth = 1600) {
     });
 }
 
-const SCENE_HINTS = [
-    'Painting the heritage scene…',
+const LOADING_HINTS = [
+    'Reading your face…',
     'Dressing you in traditional attire…',
-    'Aligning shadows and perspective…',
-];
-const SWAP_HINTS = [
-    'Locking in your face with pixel accuracy…',
-    'Blending skin tone and lighting…',
-    'Final touches…',
+    'Placing you at the heritage location…',
+    'Rendering photorealistic detail…',
+    'Almost there — final touches…',
 ];
 let loadingHintTimer = null;
-function cycleHints(hints) {
-    stopLoadingHints();
+function startLoadingHints() {
     let i = 0;
-    el.loadingHint.textContent = hints[0];
+    el.loadingHint.textContent = LOADING_HINTS[0];
     loadingHintTimer = setInterval(() => {
-        i = (i + 1) % hints.length;
-        el.loadingHint.textContent = hints[i];
+        i = (i + 1) % LOADING_HINTS.length;
+        el.loadingHint.textContent = LOADING_HINTS[i];
     }, 4500);
 }
 function stopLoadingHints() {
@@ -406,70 +402,33 @@ async function generate() {
     goToStep(3);
     el.loadingState.hidden = false;
     el.resultPanel.hidden = true;
-    cycleHints(SCENE_HINTS);
+    startLoadingHints();
 
     try {
-        // Stage 1 — scene generation via Gemini.
-        // Reference photo only informs age/gender/complexion now, so a
-        // modest 1280px compression is plenty.
-        const userImg = await compressImage(state.capturedBlob, 0.9, 1280);
+        // Single call to /api/generate — the server handles face
+        // classification + FLUX-PuLID identity-preserving generation in one
+        // step. No more 2-stage Gemini scene + Replicate face-swap chain.
+        // Higher-res webcam capture gives PuLID more identity detail to lock
+        // onto, so we keep this at 2048px.
+        const userImg = await compressImage(state.capturedBlob, 0.95, 2048);
 
         const genForm = new FormData();
         genForm.append('userImage', userImg, 'photo.jpg');
         genForm.append('prompt', state.selectedPreset.prompt);
 
-        try {
-            const bgRes = await fetch(state.selectedPreset.backgroundUrl);
-            if (bgRes.ok) {
-                const bgBlob = await bgRes.blob();
-                const bgCompressed = await compressImage(bgBlob, 0.6, 1280);
-                genForm.append('backgroundImage', bgCompressed, 'bg.jpg');
-            }
-        } catch (e) {
-            console.warn('Background fetch failed; continuing without it.');
-        }
-
         const genRes = await fetch('/api/generate', { method: 'POST', body: genForm });
         const genData = await genRes.json();
         if (!genRes.ok || !genData.success) {
-            throw new Error(genData.details || genData.error || 'Scene generation failed');
+            throw new Error(genData.details || genData.error || 'Generation failed');
         }
 
-        // Stage 2 — face swap. Source = webcam face, target = Gemini scene.
-        // On mock mode (no GEMINI_API_KEY), genData.generatedImage is the
-        // original webcam photo; skip the swap and just show it.
-        let finalDataUrl;
-        if (genData.note) {
-            finalDataUrl = `data:${genData.mimeType};base64,${genData.generatedImage}`;
-            toast(genData.note, 'error', 6000);
-        } else {
-            cycleHints(SWAP_HINTS);
-
-            const sceneBlob = await (await fetch(`data:${genData.mimeType};base64,${genData.generatedImage}`)).blob();
-
-            // Higher-res source face gives the swap model more identity detail.
-            const sourceFace = await compressImage(state.capturedBlob, 0.95, 2048);
-
-            const swapForm = new FormData();
-            swapForm.append('sourceImage', sourceFace, 'face.jpg');
-            swapForm.append('targetImage', sceneBlob, 'scene.jpg');
-            swapForm.append('prompt', state.selectedPreset.prompt);
-
-            const swapRes = await fetch('/api/faceswap', { method: 'POST', body: swapForm });
-            const swapData = await swapRes.json();
-            if (!swapRes.ok || !swapData.success) {
-                throw new Error(swapData.details || swapData.error || 'Face swap failed');
-            }
-
-            finalDataUrl = `data:${swapData.mimeType};base64,${swapData.generatedImage}`;
-            if (swapData.note) toast(swapData.note, 'error', 6000);
-            else toast('Your photo is ready!', 'success');
-        }
-
-        el.generatedImage.src = finalDataUrl;
+        el.generatedImage.src = `data:${genData.mimeType};base64,${genData.generatedImage}`;
         el.resultLocation.textContent = state.selectedPreset.name;
         el.loadingState.hidden = true;
         el.resultPanel.hidden = false;
+
+        if (genData.note) toast(genData.note, 'error', 6000);
+        else toast('Your photo is ready!', 'success');
     } catch (err) {
         console.error(err);
         toast(err.message || 'Generation failed. Please try again.', 'error', 6000);

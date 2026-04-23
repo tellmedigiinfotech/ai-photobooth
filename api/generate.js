@@ -1,4 +1,5 @@
 const { GoogleGenAI } = require("@google/genai");
+const Replicate = require("replicate");
 const multer = require("multer");
 
 const upload = multer({
@@ -15,6 +16,50 @@ function runMulter(req, res) {
     });
 }
 
+function bufferToDataUrl(buffer, mimeType) {
+    return `data:${mimeType || "image/jpeg"};base64,${buffer.toString("base64")}`;
+}
+
+async function normaliseOutputToUrl(output) {
+    const first = Array.isArray(output) ? output[0] : output;
+    if (!first) return null;
+    if (typeof first === "string") return first;
+    if (typeof first.url === "function") {
+        const u = first.url();
+        return typeof u === "string" ? u : u?.toString?.();
+    }
+    return null;
+}
+
+async function downloadAsBuffer(url) {
+    const fetchRes = await fetch(url);
+    if (!fetchRes.ok) throw new Error(`Download failed: ${fetchRes.status}`);
+    const mime = fetchRes.headers.get("content-type") || "image/jpeg";
+    const buf = Buffer.from(await fetchRes.arrayBuffer());
+    return { buf, mime };
+}
+
+// Preset prompts in app.js encode attire as "...; for men, X; for women, Y."
+// We keep only the gender-appropriate half so FLUX doesn't see conflicting
+// clothing specs. The regex catches the "for <opposite>, ..." clause up to
+// the next sentence-ish boundary.
+function stripOppositeGenderAttire(prompt, gender) {
+    const oppWord = gender === "male" ? "women" : "men";
+    const pattern = new RegExp(`;\\s*for\\s+${oppWord}[^;.]*`, "gi");
+    return prompt.replace(pattern, "");
+}
+
+function buildFluxPrompt(scenePrompt, subject) {
+    const genderWord = subject.gender === "male" ? "man" : "woman";
+    const age = (subject.ageRange || "adult").replace(/-/g, " ");
+    const filtered = stripOppositeGenderAttire(scenePrompt, subject.gender);
+    return [
+        `Photorealistic portrait photograph of a ${age} ${genderWord} with ${subject.complexion} complexion and ${subject.hair}.`,
+        filtered,
+        `Medium shot from the waist up, standing pose, facing the camera, natural diffused daylight, sharp focus, 50mm lens, professional photography, cinematic colour grading, high detail.`,
+    ].join(" ");
+}
+
 module.exports = async function handler(req, res) {
     if (req.method !== "POST") {
         return res.status(405).json({ error: "Method not allowed" });
@@ -27,52 +72,47 @@ module.exports = async function handler(req, res) {
 
         const fileByField = {};
         for (const f of req.files || []) fileByField[f.fieldname] = f;
-
         const userImage = fileByField["userImage"];
-        const backgroundImage = fileByField["backgroundImage"];
 
-        if (!userImage) {
-            return res.status(400).json({ error: "User image is required" });
-        }
-        if (!prompt) {
-            return res.status(400).json({ error: "Prompt is required" });
-        }
+        if (!userImage) return res.status(400).json({ error: "User image is required" });
+        if (!prompt) return res.status(400).json({ error: "Prompt is required" });
 
-        const apiKey = process.env.GEMINI_API_KEY;
-        if (!apiKey) {
+        const geminiKey = process.env.GEMINI_API_KEY;
+        const replicateToken = process.env.REPLICATE_API_TOKEN;
+        if (!geminiKey || !replicateToken) {
             return res.json({
                 success: true,
                 generatedImage: userImage.buffer.toString("base64"),
                 mimeType: userImage.mimetype,
-                note: "Configure GEMINI_API_KEY in Vercel env to use actual AI generation.",
+                note: "Set GEMINI_API_KEY and REPLICATE_API_TOKEN in Vercel env to enable generation.",
             });
         }
 
-        const ai = new GoogleGenAI({ apiKey });
+        const ai = new GoogleGenAI({ apiKey: geminiKey });
+        const replicate = new Replicate({ auth: replicateToken });
 
-        const userImageData = {
+        const userImageDataUrl = bufferToDataUrl(userImage.buffer, userImage.mimetype);
+        const userImagePart = {
             inlineData: {
                 mimeType: userImage.mimetype || "image/jpeg",
                 data: userImage.buffer.toString("base64"),
             },
         };
 
-        // Stage 1a — classify the reference photo with Gemini 2.5 Flash.
-        // Cheap (~$0.001), ~500ms, and gives the image-gen stage a locked-in
-        // gender/age/complexion so it can't guess wrong.
+        // Stage 1 — classify the reference photo with Gemini 2.5 Flash.
+        // Gives FLUX-PuLID a locked-in gender/age/complexion so the prompt
+        // can describe the person accurately instead of guessing.
         console.log("Classifying reference photo...");
         const classifyResp = await ai.models.generateContent({
             model: "gemini-2.5-flash",
             contents: [
-                userImageData,
-                { text: `Analyse the person in this photo. Return ONLY a JSON object with these exact keys and allowed values, no prose:\n{\n  "gender": "male" | "female",\n  "ageRange": "child" | "teen" | "young-adult" | "adult" | "senior",\n  "complexion": "fair" | "wheatish" | "olive" | "brown" | "dark",\n  "hair": "<short description, max 8 words, e.g. short black hair, long straight brown hair, bald, shoulder-length wavy>"\n}\nPick the single most likely value for each. Do not add other keys. Do not add commentary.` },
+                userImagePart,
+                { text: `Analyse the person in this photo. Return ONLY a JSON object with these exact keys and allowed values, no prose:\n{\n  "gender": "male" | "female",\n  "ageRange": "child" | "teen" | "young-adult" | "adult" | "senior",\n  "complexion": "fair" | "wheatish" | "olive" | "brown" | "dark",\n  "hair": "<short description, max 8 words>"\n}` },
             ],
-            config: {
-                responseMimeType: "application/json",
-            },
+            config: { responseMimeType: "application/json" },
         });
 
-        let subject = { gender: null, ageRange: "adult", complexion: "wheatish", hair: "short dark hair" };
+        const subject = { gender: null, ageRange: "adult", complexion: "wheatish", hair: "short dark hair" };
         try {
             const rawText = classifyResp.candidates?.[0]?.content?.parts?.find(p => p.text)?.text || "";
             const parsed = JSON.parse(rawText);
@@ -90,134 +130,55 @@ module.exports = async function handler(req, res) {
             });
         }
 
-        const gender = subject.gender;
-        const attireWord = gender === "male" ? "men" : "women";
-        const oppositeAttireWord = gender === "male" ? "women" : "men";
-        const oppositeBodyWord = gender === "male" ? "female" : "male";
+        console.log(`Detected: ${subject.gender}, ${subject.ageRange}, ${subject.complexion}, ${subject.hair}`);
 
-        console.log(`Detected: ${gender}, ${subject.ageRange}, ${subject.complexion}, ${subject.hair}`);
-        console.log("Starting Gemini image generation...");
+        // Stage 2 — FLUX-PuLID generation. Single model, FLUX-dev base,
+        // IdentityNet-style face conditioning via PuLID. State-of-the-art
+        // identity preservation (dramatically better than SDXL-era InstantID
+        // or InsightFace inswapper_128 wrappers).
+        const fluxPrompt = buildFluxPrompt(prompt, subject);
+        const negativePrompt = "cartoon, anime, illustration, painting, 3d render, plastic skin, over-smoothed, blurry face, distorted face, extra limbs, deformed, low quality, watermark, text, signature, cross-eyed, partially rendered, bad anatomy";
 
-        // Identity preservation is handled by a separate face-swap stage
-        // downstream, so Gemini only needs to produce a plausible scene:
-        // correct background (unchanged), correct gender, correct attire,
-        // correct framing. Subject attributes come from a classification
-        // pre-step (Gemini 2.5 Flash) so gender is locked in, not guessed.
-        const systemPrompt = [
-            `TASK: Insert a ${gender.toUpperCase()} person into the provided heritage-location background photograph, dressed in the specified cultural attire.`,
-            ``,
-            `SUBJECT PROFILE (DETECTED FROM REFERENCE PHOTO):`,
-            `- Gender: ${gender.toUpperCase()}`,
-            `- Age range: ${subject.ageRange}`,
-            `- Complexion: ${subject.complexion}`,
-            `- Hair: ${subject.hair}`,
-            ``,
-            `=================================================================`,
-            `RULE 0 — GENDER (NON-NEGOTIABLE)`,
-            `=================================================================`,
-            `THE SUBJECT IS ${gender.toUpperCase()}. Generate a ${gender} body with ${gender} attire, ${gender} hairstyle, and ${gender} proportions. Do NOT generate a ${oppositeBodyWord} body under any circumstances. In the scene description below, use ONLY the "for ${attireWord}" attire spec and IGNORE the "for ${oppositeAttireWord}" spec entirely.`,
-            ``,
-            `=================================================================`,
-            `RULE 1 — THE BACKGROUND MUST BE THE EXACT IMAGE PROVIDED`,
-            `=================================================================`,
-            `The heritage background photograph is the FINAL CANVAS. Every pixel of the background not directly covered by the inserted person must remain identical to the input background photograph.`,
-            ``,
-            `FORBIDDEN background changes:`,
-            `- Regenerating or re-rendering any part of the architecture, stonework, carvings, walls, arches, roof, or facade`,
-            `- Changing the colours, hues, or colour-grade of the background`,
-            `- Changing the lighting, shadows, time of day, or sky in the background`,
-            `- Altering the camera angle, perspective, crop, or framing of the background`,
-            `- Adding or removing objects, people, plants, or architectural details`,
-            `- Softening, stylising, painting-over, or "prettifying" the background`,
-            ``,
-            `=================================================================`,
-            `RULE 2 — HISTORICAL & CULTURAL ATTIRE`,
-            `=================================================================`,
-            `The clothing, jewellery, accessories, and footwear MUST match the specific region, era, and tradition described in the scene description — not generic modern clothing, not westernised fusion. Follow the scene description's attire spec precisely.`,
-            ``,
-            `=================================================================`,
-            `RULE 3 — FRAMING`,
-            `=================================================================`,
-            `Frame as a MEDIUM SHOT: show the person from roughly the WAIST UP. The person's torso and upper body fills roughly half to two-thirds of the frame's vertical height. The face should occupy roughly 12-18% of the vertical height.`,
-            ``,
-            `- Think "portrait photograph taken from 2-3 metres away": head, shoulders, chest, and waist visible, with the heritage monument clearly visible as context behind them.`,
-            `- The face must be clearly visible, well-lit, and front-facing so it can be cleanly identified.`,
-            `- Match the person's lighting direction, colour temperature, and cast shadows to the background's existing lighting.`,
-            `- Output ONE cohesive photograph. No collages, grids, or side-by-side views.`,
-            ``,
-            `=================================================================`,
-            `RULE 4 — PERSON APPEARANCE`,
-            `=================================================================`,
-            `Use the SUBJECT PROFILE above (gender, age range, complexion, hair) — it is authoritative. Do NOT re-infer gender from the reference face. Exact facial identity does NOT need to be preserved; a downstream step handles that. A generic, well-lit, front-facing ${gender} face in the ${subject.ageRange} age range with ${subject.complexion} complexion and ${subject.hair} is sufficient.`,
-        ].join("\n");
+        console.log("FLUX-PuLID generation...");
+        console.log("Prompt:", fluxPrompt.slice(0, 200));
 
-        const backgroundImageData = backgroundImage ? {
-            inlineData: {
-                mimeType: backgroundImage.mimetype || "image/jpeg",
-                data: backgroundImage.buffer.toString("base64"),
-            },
-        } : null;
-
-        const contents = [
-            { text: `REFERENCE PHOTO — use only for age/gender/complexion/hair style cues:` },
-            userImageData,
-        ];
-
-        if (backgroundImageData) {
-            contents.push({ text: `\nBACKGROUND PHOTOGRAPH — this is the final canvas; every pixel must remain unchanged except where covered by the inserted person:` });
-            contents.push(backgroundImageData);
-        }
-
-        contents.push({ text: `\n${systemPrompt}` });
-        contents.push({ text: `\nSCENE DESCRIPTION — use ONLY the "for ${attireWord}" attire spec, ignore the "for ${oppositeAttireWord}" spec, and preserve the background exactly:\n${prompt}` });
-        contents.push({ text: `\nFINAL REMINDER: The subject is ${gender.toUpperCase()}. Generate a ${gender} person in ${attireWord}'s attire. Do not generate a ${oppositeBodyWord} body.` });
-
-        const response = await ai.models.generateContent({
-            model: "gemini-3-pro-image-preview",
-            contents: contents,
-            config: {
-                responseModalities: ["Image"],
-                imageConfig: {
-                    imageSize: "1K",
-                    aspectRatio: "4:3",
+        const output = await replicate.run(
+            "bytedance/flux-pulid:8baa7ef2255075b46f4d91cd238c21d31181b3e6a864463f967960bb0112525b",
+            {
+                input: {
+                    main_face_image: userImageDataUrl,
+                    prompt: fluxPrompt,
+                    negative_prompt: negativePrompt,
+                    width: 1152,
+                    height: 896,
+                    num_steps: 20,
+                    start_step: 0,
+                    id_weight: 1.05,
+                    true_cfg: 1.0,
+                    guidance_scale: 4,
+                    num_outputs: 1,
+                    output_format: "jpg",
+                    output_quality: 95,
+                    max_sequence_length: 256,
                 },
-            },
-        });
-
-        let generatedImageBase64 = null;
-        let responseMimeType = "image/png";
-
-        if (response.candidates && response.candidates[0]?.content?.parts) {
-            for (const part of response.candidates[0].content.parts) {
-                if (part.inlineData) {
-                    generatedImageBase64 = part.inlineData.data;
-                    responseMimeType = part.inlineData.mimeType || "image/png";
-                    break;
-                }
             }
-        }
+        );
 
-        if (!generatedImageBase64) {
-            let textResponse = "";
-            if (response.candidates && response.candidates[0]?.content?.parts) {
-                for (const part of response.candidates[0].content.parts) {
-                    if (part.text) textResponse += part.text;
-                }
-            }
-            throw new Error(
-                textResponse || "No image was generated. Try a different prompt."
-            );
-        }
+        const finalUrl = await normaliseOutputToUrl(output);
+        if (!finalUrl) throw new Error("FLUX-PuLID returned no output");
 
-        console.log("✅ Gemini scene generation complete!");
+        console.log("✅ Done:", finalUrl);
+
+        const { buf, mime } = await downloadAsBuffer(finalUrl);
 
         return res.json({
             success: true,
-            generatedImage: generatedImageBase64,
-            mimeType: responseMimeType,
+            generatedImage: buf.toString("base64"),
+            mimeType: mime,
+            subject,
         });
     } catch (error) {
-        console.error("❌ Error generating image:", error.message);
+        console.error("❌ Error:", error.message);
         return res.status(500).json({
             error: "Failed to generate image",
             details: error.message,
