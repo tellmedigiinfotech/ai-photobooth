@@ -213,3 +213,12 @@ module.exports = async function handler(req, res) {
         });
     }
 };
+
+// Tell Vercel's runtime NOT to pre-parse the multipart body — multer needs
+// the raw request stream. Without this, "Unexpected end of form" errors
+// surface once the runtime drains the body before multer sees it.
+module.exports.config = {
+    api: {
+        bodyParser: false,
+    },
+};
