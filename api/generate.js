@@ -55,7 +55,7 @@ const PRESETS = {
 
 function buildPrompt(preset, gender) {
     const outfit = gender === "female" ? preset.female : preset.male;
-    return `create an image of this person standing in this ${preset.setting}, dressed like a ${outfit}. please make sure the face of this person is not changed. please adjust the lights and shadows properly, the image should look super realistic and natural.`;
+    return `create an image of this person standing in this ${preset.setting}, dressed like a ${outfit}. keep the face exactly as in the reference photo — same facial features, same skin tone, same expression, do not change or stylise the face in any way. please adjust the lights and shadows properly so the person blends naturally into the scene. the image should look super realistic and natural.`;
 }
 
 async function fetchBackgroundAsDataParts(req, filename) {
@@ -115,7 +115,13 @@ module.exports = async function handler(req, res) {
                 { inlineData: backgroundPart },
                 { text: prompt },
             ],
-            config: { responseModalities: ["Image"] },
+            config: {
+                responseModalities: ["Image"],
+                imageConfig: {
+                    aspectRatio: "3:4",
+                    imageSize: "2K",
+                },
+            },
         });
 
         const parts = response.candidates?.[0]?.content?.parts || [];
