@@ -1,5 +1,4 @@
 const { GoogleGenAI } = require("@google/genai");
-const Replicate = require("replicate");
 const multer = require("multer");
 const { Readable } = require("stream");
 
@@ -35,27 +34,39 @@ function runMulter(req, res) {
     });
 }
 
-function bufferToDataUrl(buffer, mimeType) {
-    return `data:${mimeType || "image/jpeg"};base64,${buffer.toString("base64")}`;
+// Per-preset data: the background filename, a short setting noun for the
+// prompt, and gender-keyed outfit phrases. Kept deliberately terse — the
+// winning prompt that inspired this used just "maratha warrior".
+const PRESETS = {
+    1:  { bg: "Jagdambi Temple , Kandariya Mahadev Temple.jpg", setting: "temple", male: "rajput king",            female: "rajput queen in a traditional saree" },
+    2:  { bg: "Lakshmana Temple IMG_9753-HDR.jpg",              setting: "temple", male: "rajput king",            female: "rajput queen in a traditional saree" },
+    3:  { bg: "Jahangir Mahal 6 - Copy.jpg",                    setting: "palace courtyard", male: "bundela rajput warrior", female: "bundela princess in a red silk lehenga" },
+    4:  { bg: "jahangir gate orchha.jpg",                       setting: "palace gateway",   male: "bundela rajput warrior", female: "bundela princess in a maroon silk lehenga" },
+    5:  { bg: "Mandu’s Watchful Gates.jpg",                setting: "fort gateway",     male: "medieval warrior in dark robes and a turban", female: "malwa-era queen in a teal saree" },
+    6:  { bg: "Chattei River view (7).jpg",                     setting: "riverside chhatri", male: "maratha warrior", female: "maratha queen in a traditional burgundy nauvari saree" },
+    7:  { bg: "Chattri Monuments 1.jpg",                        setting: "chhatri monument", male: "maratha warrior", female: "peshwa-era lady in a traditional forest-green nauvari saree" },
+    8:  { bg: "Chattri Monuments 4.jpg",                        setting: "chhatri monument", male: "maratha warrior", female: "peshwa-era lady in a traditional deep-red nauvari saree" },
+    9:  { bg: "Krishnabai holkar chhatri .jpg",                 setting: "chhatri",          male: "maratha warrior", female: "holkar-era queen in a traditional royal-blue nauvari saree" },
+    10: { bg: "Rajwada Indore.jpg",                             setting: "palace",           male: "maratha king",    female: "holkar-era queen in a traditional peacock-green paithani saree" },
+    11: { bg: "RajWada 15.jpg",                                 setting: "palace courtyard", male: "maratha nobleman", female: "holkar-era royal lady in a traditional teal nauvari saree" },
+    12: { bg: "kheoni wildlife sanctuary .jpg",                 setting: "forest",           male: "wildlife safari explorer in a khaki shirt, cargo trousers and a wide-brim safari hat", female: "wildlife safari explorer in a khaki shirt, cargo trousers and a wide-brim safari hat" },
+    13: { bg: "kheoni wildlife sanctuary 1.jpg",                setting: "forest trail",     male: "wildlife safari explorer in a sand-beige shirt, khaki cargo trousers and a wide-brim safari hat", female: "wildlife safari explorer in a sand-beige shirt, khaki cargo trousers and a wide-brim safari hat" },
+};
+
+function buildPrompt(preset, gender) {
+    const outfit = gender === "female" ? preset.female : preset.male;
+    return `create an image of this person standing in this ${preset.setting}, dressed like a ${outfit}. please make sure the face of this person is not changed. please adjust the lights and shadows properly, the image should look super realistic and natural.`;
 }
 
-async function normaliseOutputToUrl(output) {
-    const first = Array.isArray(output) ? output[0] : output;
-    if (!first) return null;
-    if (typeof first === "string") return first;
-    if (typeof first.url === "function") {
-        const u = first.url();
-        return typeof u === "string" ? u : u?.toString?.();
-    }
-    return null;
-}
-
-async function downloadAsBuffer(url) {
-    const fetchRes = await fetch(url);
-    if (!fetchRes.ok) throw new Error(`Download failed: ${fetchRes.status}`);
-    const mime = fetchRes.headers.get("content-type") || "image/jpeg";
-    const buf = Buffer.from(await fetchRes.arrayBuffer());
-    return { buf, mime };
+async function fetchBackgroundAsDataParts(req, filename) {
+    const host = req.headers["x-forwarded-host"] || req.headers.host;
+    const protocol = req.headers["x-forwarded-proto"] || "https";
+    const url = `${protocol}://${host}/assets/backgrounds/${encodeURI(filename)}`;
+    const r = await fetch(url);
+    if (!r.ok) throw new Error(`Failed to fetch background (${r.status}): ${url}`);
+    const mime = r.headers.get("content-type") || "image/jpeg";
+    const buf = Buffer.from(await r.arrayBuffer());
+    return { mimeType: mime, data: buf.toString("base64") };
 }
 
 module.exports = async function handler(req, res) {
@@ -66,129 +77,58 @@ module.exports = async function handler(req, res) {
     try {
         await runMulter(req, res);
 
-        const { presetId } = req.body;
+        const { presetId, gender } = req.body;
 
         const fileByField = {};
         for (const f of req.files || []) fileByField[f.fieldname] = f;
         const userImage = fileByField["userImage"];
 
         if (!userImage) return res.status(400).json({ error: "User image is required" });
-        if (!presetId) return res.status(400).json({ error: "presetId is required" });
-
-        const numericPresetId = Number(presetId);
-        if (!Number.isInteger(numericPresetId) || numericPresetId < 1) {
-            return res.status(400).json({ error: "presetId must be a positive integer" });
+        if (!presetId)  return res.status(400).json({ error: "presetId is required" });
+        if (gender !== "male" && gender !== "female") {
+            return res.status(400).json({ error: "gender must be 'male' or 'female'" });
         }
 
+        const preset = PRESETS[Number(presetId)];
+        if (!preset) return res.status(400).json({ error: "Unknown presetId" });
+
         const geminiKey = process.env.GEMINI_API_KEY;
-        const replicateToken = process.env.REPLICATE_API_TOKEN;
-        if (!geminiKey || !replicateToken) {
+        if (!geminiKey) {
             return res.json({
                 success: true,
                 generatedImage: userImage.buffer.toString("base64"),
                 mimeType: userImage.mimetype,
-                note: "Set GEMINI_API_KEY and REPLICATE_API_TOKEN in Vercel env to enable generation.",
+                note: "Set GEMINI_API_KEY in Vercel env to enable generation.",
             });
         }
+
+        const prompt = buildPrompt(preset, gender);
+        console.log("Prompt:", prompt);
+
+        const backgroundPart = await fetchBackgroundAsDataParts(req, preset.bg);
 
         const ai = new GoogleGenAI({ apiKey: geminiKey });
-        const replicate = new Replicate({ auth: replicateToken });
-
-        const userImagePart = {
-            inlineData: {
-                mimeType: userImage.mimetype || "image/jpeg",
-                data: userImage.buffer.toString("base64"),
-            },
-        };
-
-        // Stage 1 — classify the reference photo with Gemini 2.5 Flash to
-        // select the right-gender template. ~500ms, ~$0.001.
-        console.log("Classifying reference photo...");
-        const classifyResp = await ai.models.generateContent({
-            model: "gemini-2.5-flash",
+        const response = await ai.models.generateContent({
+            model: "gemini-3-pro-image-preview",
             contents: [
-                userImagePart,
-                { text: `Analyse the person in this photo. Return ONLY a JSON object, no prose:\n{\n  "gender": "male" | "female"\n}` },
+                { inlineData: { mimeType: userImage.mimetype || "image/jpeg", data: userImage.buffer.toString("base64") } },
+                { inlineData: backgroundPart },
+                { text: prompt },
             ],
-            config: { responseMimeType: "application/json" },
+            config: { responseModalities: ["Image"] },
         });
 
-        let gender = null;
-        try {
-            const rawText = classifyResp.candidates?.[0]?.content?.parts?.find(p => p.text)?.text || "";
-            const parsed = JSON.parse(rawText);
-            if (parsed.gender === "male" || parsed.gender === "female") gender = parsed.gender;
-        } catch (_) { /* fall through */ }
-
-        if (!gender) {
-            return res.status(422).json({
-                error: "Couldn't detect a face clearly. Please retake the photo with better lighting and a front-facing pose.",
-            });
+        const parts = response.candidates?.[0]?.content?.parts || [];
+        const imagePart = parts.find(p => p.inlineData);
+        if (!imagePart) {
+            const textPart = parts.find(p => p.text);
+            throw new Error(`No image in response. ${textPart?.text || ""}`.trim());
         }
-
-        // Stage 2 — build the template URL. Templates are static assets
-        // bundled with the deployment at /assets/templates/{id}-{gender}.jpg.
-        // We pass the URL directly to Replicate, which fetches it.
-        const host = req.headers["x-forwarded-host"] || req.headers.host;
-        const protocol = req.headers["x-forwarded-proto"] || "https";
-        const templateUrl = `${protocol}://${host}/assets/templates/${numericPresetId}-${gender}.jpg`;
-
-        console.log(`Gender: ${gender}, template: ${templateUrl}`);
-
-        // Stage 3 — face-swap the user's face onto the template. The target
-        // face in the template is a real, well-lit, front-facing photograph,
-        // which is the ideal case for InsightFace-based swap models.
-        console.log("Face swap: cdingram/face-swap...");
-        const swapOutput = await replicate.run(
-            "cdingram/face-swap:d1d6ea8c8be89d664a07a457526f7128109dee7030fdac424788d762c71ed111",
-            {
-                input: {
-                    swap_image: bufferToDataUrl(userImage.buffer, userImage.mimetype),
-                    input_image: templateUrl,
-                },
-            }
-        );
-        const swappedUrl = await normaliseOutputToUrl(swapOutput);
-        if (!swappedUrl) throw new Error("Face-swap returned no output");
-        console.log("✅ Swap done:", swappedUrl);
-
-        // Stage 4 — face restoration / re-rendering. At fidelity=0.5 the
-        // model rebalances toward restoration quality: it preserves
-        // identity but re-textures the face region to match the template's
-        // photo grain, lighting, and skin tones. This dissolves the "pasted
-        // on" feeling that raw InsightFace swaps exhibit. Background is not
-        // touched (background_enhance=false).
-        let finalUrl = swappedUrl;
-        try {
-            console.log("Face restore: sczhou/codeformer (fidelity=0.5)...");
-            const restoreOutput = await replicate.run(
-                "sczhou/codeformer:cc4956dd26fa5a7185d5660cc9100fab1b8070a1d1654a8bb5eb6d443b020bb2",
-                {
-                    input: {
-                        image: swappedUrl,
-                        codeformer_fidelity: 0.5,
-                        background_enhance: false,
-                        face_upsample: true,
-                        upscale: 1,
-                    },
-                }
-            );
-            const restoredUrl = await normaliseOutputToUrl(restoreOutput);
-            if (restoredUrl) {
-                finalUrl = restoredUrl;
-                console.log("✅ Restore done:", restoredUrl);
-            }
-        } catch (err) {
-            console.warn("CodeFormer failed, using raw swap:", err.message);
-        }
-
-        const { buf, mime } = await downloadAsBuffer(finalUrl);
 
         return res.json({
             success: true,
-            generatedImage: buf.toString("base64"),
-            mimeType: mime,
-            gender,
+            generatedImage: imagePart.inlineData.data,
+            mimeType: imagePart.inlineData.mimeType || "image/jpeg",
         });
     } catch (error) {
         console.error("❌ Error:", error.message);

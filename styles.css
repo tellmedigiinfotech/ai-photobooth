@@ -650,6 +650,48 @@ p { margin: 0; color: var(--c-ink-soft); }
 }
 .selection-context__edit:hover { background: var(--c-surface-alt); }
 
+.gender-toggle {
+    display: flex;
+    align-items: center;
+    gap: var(--s-2);
+    padding: var(--s-2);
+    background: var(--c-surface);
+    border: 1px solid var(--c-border);
+    border-radius: var(--r-full);
+    width: fit-content;
+    margin: 0 auto;
+    box-shadow: var(--sh-1);
+    min-inline-size: unset;
+}
+.gender-toggle__legend {
+    font-size: 0.88rem;
+    color: var(--c-muted);
+    padding: 0 var(--s-2) 0 var(--s-3);
+    float: none;
+}
+.gender-toggle__option {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    padding: var(--s-2) var(--s-4);
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--c-text);
+    border-radius: var(--r-full);
+    cursor: pointer;
+    transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
+}
+.gender-toggle__option input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+.gender-toggle__option:hover { background: var(--c-surface-alt); }
+.gender-toggle__option:has(input:checked) {
+    background: var(--c-accent);
+    color: #fff;
+}
+
 .destinations {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));

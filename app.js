@@ -10,6 +10,7 @@ const state = {
     capturedBlob: null,
     capturedUrl: null,
     selectedPreset: null,
+    selectedGender: null,
     cameraDevices: [],
 };
 
@@ -38,6 +39,7 @@ const el = {
     // Step 2
     contextPhoto:       $('contextPhoto'),
     editPhotoBtn:       $('editPhotoBtn'),
+    genderRadios:       document.querySelectorAll('input[name="gender"]'),
     presetsGrid:        $('presetsGrid'),
     generateBtn:        $('generateBtn'),
     selectedDestName:   $('selectedDestinationName'),
@@ -57,103 +59,24 @@ const el = {
     yearSpan:           $('yearSpan'),
 };
 
-// Per-preset prompts describe the scene + attire. The server adds the
-// identity-preservation scaffolding and labels the three reference angles,
-// so no prefix is appended here — keeping prompt signal-to-noise high.
-
 // ── Presets ──────────────────────────────────────────────────────
+// Display data only — the actual prompt template + outfit per gender
+// lives server-side in api/generate.js (PRESETS). The client just sends
+// presetId + gender.
 const presets = [
-    {
-        id: 1,
-        name: 'Khajuraho — Kandariya Mahadev',
-        description: 'UNESCO-listed Chandela-era sandstone temples',
-        prompt: 'Composite the person naturally into the provided background photograph of the Kandariya Mahadev and Jagdambi temples at Khajuraho, Madhya Pradesh. Place the person standing on the temple platform in the mid-foreground, framed by the carved sandstone wall behind them, framed as a medium shot (waist-up, person filling roughly half the frame). Keep the attire subtle and everyday: for men, a plain ivory cotton kurta with cream cotton pyjama trousers; for women, a Chanderi silk-cotton saree in soft mustard with a thin gold border, small gold stud earrings and a small red bindi. Match the skin lighting to the soft diffused daylight on the pale sandstone.',
-        backgroundUrl: 'assets/backgrounds/Jagdambi Temple , Kandariya Mahadev Temple.jpg'
-    },
-    {
-        id: 2,
-        name: 'Khajuraho — Lakshmana Temple',
-        description: 'The finely carved 10th-century Chandela temple',
-        prompt: 'Composite the person naturally into the provided background photograph of the Lakshmana Temple at Khajuraho, Madhya Pradesh. Place the person standing on the temple plinth in the mid-foreground, framed by the carved sandstone reliefs behind them, framed as a medium shot (waist-up, person filling roughly half the frame). Keep the attire subtle and everyday: for men, a plain off-white cotton kurta with cream cotton pyjama trousers; for women, a Chanderi silk-cotton saree in ivory with a narrow gold border, small gold stud earrings and a small red bindi. Match the skin lighting to the soft diffused sunlight on the sandstone.',
-        backgroundUrl: 'assets/backgrounds/Lakshmana Temple IMG_9753-HDR.jpg'
-    },
-    {
-        id: 3,
-        name: 'Orchha — Jahangir Mahal',
-        description: '17th-century Bundela palace, arched courtyards',
-        prompt: 'Composite the person naturally into the provided background photograph of Jahangir Mahal at Orchha, Madhya Pradesh. Place the person standing in an arched gallery in the mid-foreground, framed by the sandstone arches behind them, framed as a medium shot (waist-up, person filling roughly half the frame). Keep the attire subtle and everyday: for men, a plain jade-green cotton kurta with cream cotton pyjama trousers; for women, a Chanderi silk-cotton saree in deep red with a narrow gold border, small gold stud earrings and a small red bindi. Match the skin lighting to the soft diffused daylight falling through the arches.',
-        backgroundUrl: 'assets/backgrounds/Jahangir Mahal 6 - Copy.jpg'
-    },
-    {
-        id: 4,
-        name: 'Orchha — Jahangir Gate',
-        description: 'Monumental Bundela-Mughal archway',
-        prompt: 'Composite the person naturally into the provided background photograph of the grand entrance gate of Jahangir Mahal at Orchha, Madhya Pradesh. Place the person standing just in front of the archway in the mid-foreground, framed by the carved stone brackets above them, framed as a medium shot (waist-up, person filling roughly half the frame). Keep the attire subtle and everyday: for men, a plain saffron cotton kurta with cream cotton pyjama trousers; for women, a Chanderi silk-cotton saree in deep maroon with a narrow gold border, small gold stud earrings and a small red bindi. Match the skin lighting to the soft diffused daylight on the pale stone.',
-        backgroundUrl: 'assets/backgrounds/jahangir gate orchha.jpg'
-    },
-    {
-        id: 5,
-        name: 'Mandu — Watchful Gates',
-        description: 'Afghan-era fortress gateways of the Malwa Sultanate',
-        prompt: 'Composite the person naturally into the provided background photograph of the monumental stone gateways of Mandu, Madhya Pradesh. Place the person standing beneath the gateway arch in the mid-foreground, framed by the weathered stone masonry behind them, framed as a medium shot (waist-up, person filling roughly half the frame). Keep the attire subtle and everyday: for men, a plain deep-indigo cotton kurta with cream cotton pyjama trousers; for women, a Maheshwari silk-cotton saree in teal with a rust-red border, small silver stud earrings and a small red bindi. Match the skin lighting to the soft diffused daylight on the weathered stone.',
-        backgroundUrl: 'assets/backgrounds/Mandu’s Watchful Gates.jpg'
-    },
-    {
-        id: 6,
-        name: 'Maheshwar — Chhatri by the River',
-        description: 'Holkar cenotaphs above the Narmada ghats',
-        prompt: 'Composite the person naturally into the provided background photograph of the riverside chhatri at Maheshwar, Madhya Pradesh. Place the person standing on the stone platform in the mid-foreground, framed by the sandstone chhatri rising behind them, framed as a medium shot (waist-up, person filling roughly half the frame). Keep the attire subtle and culturally Maharashtrian: for men, a plain cream cotton kurta with a cream cotton dhoti; for women, a Maheshwari silk-cotton saree in burgundy with a thin gold border, a small gold nath (nose pin), a simple gold thushi (short choker), small gold stud earrings and a small red bindi. Match the skin lighting to the soft diffused river-reflected daylight.',
-        backgroundUrl: 'assets/backgrounds/Chattei River view (7).jpg'
-    },
-    {
-        id: 7,
-        name: 'Holkar Chhatris I',
-        description: 'Domed sandstone cenotaphs with pillared verandas',
-        prompt: 'Composite the person naturally into the provided background photograph of the Holkar-dynasty chhatris in Madhya Pradesh. Place the person standing on the stone plinth in the mid-foreground, framed by the carved sandstone columns behind them, framed as a medium shot (waist-up, person filling roughly half the frame). Keep the attire subtle and culturally Maharashtrian: for men, a plain cream cotton kurta with cream cotton pyjama trousers; for women, a Maheshwari silk-cotton saree in forest green with a thin gold border, a small gold nath, a simple gold thushi, small gold stud earrings and a small red bindi. Match the skin lighting to the soft diffused daylight on the sandstone.',
-        backgroundUrl: 'assets/backgrounds/Chattri Monuments 1.jpg'
-    },
-    {
-        id: 8,
-        name: 'Holkar Chhatris II',
-        description: 'Regal silhouette of a domed royal cenotaph',
-        prompt: 'Composite the person naturally into the provided background photograph of the domed chhatri monument in Madhya Pradesh. Place the person standing in the mid-foreground directly in front of the chhatri, framed by its carved silhouette behind them, framed as a medium shot (waist-up, person filling roughly half the frame). Keep the attire subtle and culturally Maharashtrian: for men, a plain ivory cotton kurta with cream cotton pyjama trousers; for women, a Maheshwari silk-cotton saree in deep red with a thin gold border, a small gold nath, a simple gold thushi, small gold stud earrings and a small red bindi. Match the skin lighting to the soft diffused golden daylight on the monument.',
-        backgroundUrl: 'assets/backgrounds/Chattri Monuments 4.jpg'
-    },
-    {
-        id: 9,
-        name: 'Krishnabai Holkar Chhatri',
-        description: 'The queen\'s cenotaph above the Narmada, Maheshwar',
-        prompt: 'Composite the person naturally into the provided background photograph of the Krishnabai Holkar chhatri at Maheshwar, Madhya Pradesh. Place the person standing on the stone plinth in the mid-foreground, framed by the chhatri rising behind them, framed as a medium shot (waist-up, person filling roughly half the frame). Keep the attire subtle and culturally Maharashtrian: for men, a plain cream cotton kurta with cream cotton pyjama trousers; for women, a Maheshwari silk-cotton saree in royal blue with a thin gold border, a small gold nath, a simple gold thushi, small gold stud earrings and a small red bindi. Match the skin lighting to the soft diffused Narmada-side daylight.',
-        backgroundUrl: 'assets/backgrounds/Krishnabai holkar chhatri .jpg'
-    },
-    {
-        id: 10,
-        name: 'Indore — Rajwada Palace',
-        description: 'The seven-storey Holkar palace of Indore',
-        prompt: 'Composite the person naturally into the provided background photograph of Rajwada Palace in Indore, Madhya Pradesh. Place the person standing before the main entrance in the mid-foreground, framed by the wooden-and-stone palace facade behind them, framed as a medium shot (waist-up, person filling roughly half the frame). Keep the attire subtle and culturally Maharashtrian: for men, a plain cream cotton kurta with cream cotton pyjama trousers; for women, a Paithani silk-cotton saree in peacock green with a thin gold border, a small gold nath, a simple gold thushi, small gold stud earrings and a small red bindi. Match the skin lighting to the soft diffused daylight on the palace facade.',
-        backgroundUrl: 'assets/backgrounds/Rajwada Indore.jpg'
-    },
-    {
-        id: 11,
-        name: 'Indore — Rajwada Courtyard',
-        description: 'Inside the Holkar royal seat',
-        prompt: 'Composite the person naturally into the provided background photograph of the inner courtyard and facade of Rajwada Palace in Indore, Madhya Pradesh. Place the person standing in the mid-foreground courtyard, framed by the palace wings behind them, framed as a medium shot (waist-up, person filling roughly half the frame). Keep the attire subtle and culturally Maharashtrian: for men, a plain cream cotton kurta with cream cotton pyjama trousers; for women, a Maheshwari silk-cotton saree in teal with a thin gold border, a small gold nath, a simple gold thushi, small gold stud earrings and a small red bindi. Match the skin lighting to the soft diffused daylight of the courtyard.',
-        backgroundUrl: 'assets/backgrounds/RajWada 15.jpg'
-    },
-    {
-        id: 12,
-        name: 'Kheoni Sanctuary — Wilds of MP',
-        description: 'Central Indian teak and sal forest',
-        prompt: 'Composite the person naturally into the provided background photograph of Kheoni Wildlife Sanctuary in Madhya Pradesh. Place the person standing on the forest path in the mid-foreground, framed by the teak and sal trees behind them, framed as a medium shot (waist-up, person filling roughly half the frame). Dress the person as a friendly modern wildlife-safari explorer/naturalist tourist: for men, a clean khaki short-sleeve safari shirt with a chest pocket, light beige cargo trousers, a wide-brim canvas safari hat, and a small pair of binoculars hanging from the neck; for women, the same khaki short-sleeve safari shirt with a chest pocket, light beige cargo trousers, a wide-brim canvas safari hat, and a small pair of binoculars hanging from the neck. The look must read as cheerful eco-tourist on a jungle safari, never military, paramilitary, uniformed or combat-styled — no camouflage, no green fatigues, no berets, no tactical gear, no weapons. Match the skin lighting to the soft dappled forest daylight.',
-        backgroundUrl: 'assets/backgrounds/kheoni wildlife sanctuary .jpg'
-    },
-    {
-        id: 13,
-        name: 'Kheoni Sanctuary — Forest Trail',
-        description: 'Quiet woodland of teak, sal and bamboo',
-        prompt: 'Composite the person naturally into the provided background photograph of a forest trail inside Kheoni Wildlife Sanctuary, Madhya Pradesh. Place the person standing on the trail in the mid-foreground, framed by the teak and bamboo trees behind them, framed as a medium shot (waist-up, person filling roughly half the frame). Dress the person as a friendly modern wildlife-safari explorer/naturalist tourist: for men, a clean sand-beige short-sleeve safari shirt with a chest pocket, light khaki cargo trousers, a wide-brim canvas safari hat, and a small pair of binoculars hanging from the neck; for women, the same sand-beige short-sleeve safari shirt with a chest pocket, light khaki cargo trousers, a wide-brim canvas safari hat, and a small pair of binoculars hanging from the neck. The look must read as cheerful eco-tourist on a jungle safari, never military, paramilitary, uniformed or combat-styled — no camouflage, no green fatigues, no berets, no tactical gear, no weapons. Match the skin lighting to the soft cool filtered forest light.',
-        backgroundUrl: 'assets/backgrounds/kheoni wildlife sanctuary 1.jpg'
-    }
+    { id: 1,  name: 'Khajuraho — Kandariya Mahadev',  description: 'UNESCO-listed Chandela-era sandstone temples',     backgroundUrl: 'assets/backgrounds/Jagdambi Temple , Kandariya Mahadev Temple.jpg' },
+    { id: 2,  name: 'Khajuraho — Lakshmana Temple',   description: 'The finely carved 10th-century Chandela temple',   backgroundUrl: 'assets/backgrounds/Lakshmana Temple IMG_9753-HDR.jpg' },
+    { id: 3,  name: 'Orchha — Jahangir Mahal',        description: '17th-century Bundela palace, arched courtyards',   backgroundUrl: 'assets/backgrounds/Jahangir Mahal 6 - Copy.jpg' },
+    { id: 4,  name: 'Orchha — Jahangir Gate',         description: 'Monumental Bundela-Mughal archway',                backgroundUrl: 'assets/backgrounds/jahangir gate orchha.jpg' },
+    { id: 5,  name: 'Mandu — Watchful Gates',         description: 'Afghan-era fortress gateways of the Malwa Sultanate', backgroundUrl: 'assets/backgrounds/Mandu’s Watchful Gates.jpg' },
+    { id: 6,  name: 'Maheshwar — Chhatri by the River', description: 'Holkar cenotaphs above the Narmada ghats',       backgroundUrl: 'assets/backgrounds/Chattei River view (7).jpg' },
+    { id: 7,  name: 'Holkar Chhatris I',              description: 'Domed sandstone cenotaphs with pillared verandas', backgroundUrl: 'assets/backgrounds/Chattri Monuments 1.jpg' },
+    { id: 8,  name: 'Holkar Chhatris II',             description: 'Regal silhouette of a domed royal cenotaph',       backgroundUrl: 'assets/backgrounds/Chattri Monuments 4.jpg' },
+    { id: 9,  name: 'Krishnabai Holkar Chhatri',      description: "The queen's cenotaph above the Narmada, Maheshwar", backgroundUrl: 'assets/backgrounds/Krishnabai holkar chhatri .jpg' },
+    { id: 10, name: 'Indore — Rajwada Palace',        description: 'The seven-storey Holkar palace of Indore',         backgroundUrl: 'assets/backgrounds/Rajwada Indore.jpg' },
+    { id: 11, name: 'Indore — Rajwada Courtyard',     description: 'Inside the Holkar royal seat',                     backgroundUrl: 'assets/backgrounds/RajWada 15.jpg' },
+    { id: 12, name: 'Kheoni Sanctuary — Wilds of MP', description: 'Central Indian teak and sal forest',               backgroundUrl: 'assets/backgrounds/kheoni wildlife sanctuary .jpg' },
+    { id: 13, name: 'Kheoni Sanctuary — Forest Trail', description: 'Quiet woodland of teak, sal and bamboo',          backgroundUrl: 'assets/backgrounds/kheoni wildlife sanctuary 1.jpg' },
 ];
 
 // ═══════════════════════════════════════════════════════════════
@@ -342,7 +265,17 @@ function selectDestination(preset, cardEl) {
         c.setAttribute('aria-checked', isSel ? 'true' : 'false');
     });
     el.selectedDestName.textContent = preset.name;
-    el.generateBtn.disabled = false;
+    updateGenerateEnabled();
+}
+
+function handleGenderChange(e) {
+    const value = e.target.value;
+    if (value === 'male' || value === 'female') state.selectedGender = value;
+    updateGenerateEnabled();
+}
+
+function updateGenerateEnabled() {
+    el.generateBtn.disabled = !(state.selectedPreset && state.selectedGender);
 }
 
 function escapeHtml(s) {
@@ -373,11 +306,11 @@ async function compressImage(blob, quality = 0.9, maxWidth = 1600) {
 }
 
 const LOADING_HINTS = [
-    'Reading your face…',
-    'Selecting the right wardrobe…',
-    'Swapping your face onto the scene…',
-    'Refining skin and lighting…',
-    'Almost there — final touches…',
+    'Setting the scene…',
+    'Tailoring your outfit…',
+    'Matching light and shadows…',
+    'Adding the final touches…',
+    'Almost there…',
 ];
 let loadingHintTimer = null;
 function startLoadingHints() {
@@ -394,8 +327,8 @@ function stopLoadingHints() {
 }
 
 async function generate() {
-    if (!state.capturedBlob || !state.selectedPreset) {
-        toast('Please capture a photo and pick a destination.', 'error');
+    if (!state.capturedBlob || !state.selectedPreset || !state.selectedGender) {
+        toast('Please capture a photo, pick male/female, and choose a destination.', 'error');
         return;
     }
 
@@ -405,15 +338,12 @@ async function generate() {
     startLoadingHints();
 
     try {
-        // Server-side pipeline: Gemini Flash classifies the face → picks
-        // the matching pre-generated template from /assets/templates/ →
-        // face-swap (cdingram) → CodeFormer re-render for natural
-        // integration. Returns the final JPEG directly.
         const userImg = await compressImage(state.capturedBlob, 0.95, 2048);
 
         const genForm = new FormData();
         genForm.append('userImage', userImg, 'photo.jpg');
         genForm.append('presetId', String(state.selectedPreset.id));
+        genForm.append('gender', state.selectedGender);
 
         const genRes = await fetch('/api/generate', { method: 'POST', body: genForm });
         const genData = await genRes.json();
@@ -488,10 +418,12 @@ async function shareWhatsApp() {
 function resetAll() {
     retakePhoto();
     state.selectedPreset = null;
+    state.selectedGender = null;
     el.presetsGrid.querySelectorAll('.destination-card').forEach(c => {
         c.classList.remove('is-selected');
         c.setAttribute('aria-checked', 'false');
     });
+    el.genderRadios.forEach(r => { r.checked = false; });
     el.selectedDestName.textContent = 'Nothing yet';
     el.generateBtn.disabled = true;
     goToStep(1);
@@ -524,6 +456,8 @@ function wireEvents() {
         retakePhoto();
         goToStep(1);
     });
+
+    el.genderRadios.forEach(r => r.addEventListener('change', handleGenderChange));
 
     el.generateBtn.addEventListener('click', generate);
 
