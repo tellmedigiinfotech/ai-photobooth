@@ -55,7 +55,9 @@ const PRESETS = {
 
 function buildPrompt(preset, gender) {
     const outfit = gender === "female" ? preset.female : preset.male;
-    return `create an image of this person standing in this ${preset.setting}, dressed like a ${outfit}. keep the face exactly as in the reference photo — same facial features, same skin tone, same expression, do not change or stylise the face in any way. please adjust the lights and shadows properly so the person blends naturally into the scene. the image should look super realistic and natural.`;
+    return `the most important rule: the face in the first reference photo must be preserved exactly in the output. same eyes, same nose, same mouth, same jawline, same skin tone, same age, same expression — every facial detail must be identical to the reference. do not beautify, smooth, slim, stylise, de-age, lighten or reshape the face in any way. if the face does not match the reference exactly, the image is wrong.
+
+now create an image of this person standing in this ${preset.setting}, dressed like a ${outfit}. please adjust the lights and shadows so the person blends naturally into the scene. the image should look super realistic and natural.`;
 }
 
 async function fetchBackgroundAsDataParts(req, filename) {
