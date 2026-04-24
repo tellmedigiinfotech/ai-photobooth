@@ -3,3 +3,9 @@ node_modules/
 .DS_Store
 uploads/
 *.log
+.vercel
+.env*.local
+.firebase/
+firebase-debug.log
+firebase-debug.*.log
+functions/node_modules/

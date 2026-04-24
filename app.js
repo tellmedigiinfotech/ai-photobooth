@@ -144,14 +144,14 @@ const presets = [
         id: 12,
         name: 'Kheoni Sanctuary — Wilds of MP',
         description: 'Central Indian teak and sal forest',
-        prompt: 'Composite the person naturally into the provided background photograph of Kheoni Wildlife Sanctuary in Madhya Pradesh. Place the person standing on the forest path in the mid-foreground, framed by the teak and sal trees behind them, framed as a medium shot (waist-up, person filling roughly half the frame). Keep the attire simple and everyday: for men, a plain olive cotton kurta with loose cream cotton trousers; for women, a plain olive cotton kurta with matching cotton palazzo trousers. Match the skin lighting to the soft dappled forest daylight.',
+        prompt: 'Composite the person naturally into the provided background photograph of Kheoni Wildlife Sanctuary in Madhya Pradesh. Place the person standing on the forest path in the mid-foreground, framed by the teak and sal trees behind them, framed as a medium shot (waist-up, person filling roughly half the frame). Dress the person as a friendly modern wildlife-safari explorer/naturalist tourist: for men, a clean khaki short-sleeve safari shirt with a chest pocket, light beige cargo trousers, a wide-brim canvas safari hat, and a small pair of binoculars hanging from the neck; for women, the same khaki short-sleeve safari shirt with a chest pocket, light beige cargo trousers, a wide-brim canvas safari hat, and a small pair of binoculars hanging from the neck. The look must read as cheerful eco-tourist on a jungle safari, never military, paramilitary, uniformed or combat-styled — no camouflage, no green fatigues, no berets, no tactical gear, no weapons. Match the skin lighting to the soft dappled forest daylight.',
         backgroundUrl: 'assets/backgrounds/kheoni wildlife sanctuary .jpg'
     },
     {
         id: 13,
         name: 'Kheoni Sanctuary — Forest Trail',
         description: 'Quiet woodland of teak, sal and bamboo',
-        prompt: 'Composite the person naturally into the provided background photograph of a forest trail inside Kheoni Wildlife Sanctuary, Madhya Pradesh. Place the person standing on the trail in the mid-foreground, framed by the teak and bamboo trees behind them, framed as a medium shot (waist-up, person filling roughly half the frame). Keep the attire simple and everyday: for men, a plain beige cotton kurta with loose cream cotton trousers; for women, a plain beige cotton kurta with matching cotton palazzo trousers. Match the skin lighting to the soft cool filtered forest light.',
+        prompt: 'Composite the person naturally into the provided background photograph of a forest trail inside Kheoni Wildlife Sanctuary, Madhya Pradesh. Place the person standing on the trail in the mid-foreground, framed by the teak and bamboo trees behind them, framed as a medium shot (waist-up, person filling roughly half the frame). Dress the person as a friendly modern wildlife-safari explorer/naturalist tourist: for men, a clean sand-beige short-sleeve safari shirt with a chest pocket, light khaki cargo trousers, a wide-brim canvas safari hat, and a small pair of binoculars hanging from the neck; for women, the same sand-beige short-sleeve safari shirt with a chest pocket, light khaki cargo trousers, a wide-brim canvas safari hat, and a small pair of binoculars hanging from the neck. The look must read as cheerful eco-tourist on a jungle safari, never military, paramilitary, uniformed or combat-styled — no camouflage, no green fatigues, no berets, no tactical gear, no weapons. Match the skin lighting to the soft cool filtered forest light.',
         backgroundUrl: 'assets/backgrounds/kheoni wildlife sanctuary 1.jpg'
     }
 ];
@@ -372,52 +372,11 @@ async function compressImage(blob, quality = 0.9, maxWidth = 1600) {
     });
 }
 
-function loadImageUrl(src) {
-    return new Promise((resolve, reject) => {
-        const img = new Image();
-        img.crossOrigin = 'anonymous';
-        img.onload = () => resolve(img);
-        img.onerror = () => reject(new Error(`Image load failed: ${src.slice(0, 60)}…`));
-        img.src = src;
-    });
-}
-
-// Composite a cut-out person PNG onto the heritage photograph. Heritage
-// photo is preserved pixel-perfect; the person is scaled to 72% of the
-// heritage photo's shorter dimension and placed bottom-centre so their feet
-// ground against the lower edge.
-async function compositePersonOnto(heritageUrl, personDataUrl) {
-    const [heritage, person] = await Promise.all([
-        loadImageUrl(heritageUrl),
-        loadImageUrl(personDataUrl),
-    ]);
-
-    const canvas = document.createElement('canvas');
-    canvas.width = heritage.naturalWidth;
-    canvas.height = heritage.naturalHeight;
-    const ctx = canvas.getContext('2d');
-
-    // 1. Draw the heritage photo as-is (untouched background requirement).
-    ctx.drawImage(heritage, 0, 0, canvas.width, canvas.height);
-
-    // 2. Scale the cut-out person to ~72% of the heritage image height and
-    //    place bottom-centre with a 3% margin from the bottom edge.
-    const targetHeight = canvas.height * 0.72;
-    const scale = targetHeight / person.naturalHeight;
-    const targetWidth = person.naturalWidth * scale;
-    const x = (canvas.width - targetWidth) / 2;
-    const y = canvas.height - targetHeight - canvas.height * 0.03;
-
-    ctx.drawImage(person, x, y, targetWidth, targetHeight);
-
-    return new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.95));
-}
-
 const LOADING_HINTS = [
     'Reading your face…',
-    'Dressing you in traditional attire…',
-    'Placing you at the heritage location…',
-    'Rendering photorealistic detail…',
+    'Selecting the right wardrobe…',
+    'Swapping your face onto the scene…',
+    'Refining skin and lighting…',
     'Almost there — final touches…',
 ];
 let loadingHintTimer = null;
@@ -446,15 +405,15 @@ async function generate() {
     startLoadingHints();
 
     try {
-        // /api/generate returns a cut-out RGBA PNG of the person (FLUX-PuLID
-        // + bria/remove-background). The heritage photograph is NEVER sent
-        // to the server — it's applied here via canvas compositing so the
-        // user's supplied background stays pixel-perfect.
+        // Server-side pipeline: Gemini Flash classifies the face → picks
+        // the matching pre-generated template from /assets/templates/ →
+        // face-swap (cdingram) → CodeFormer re-render for natural
+        // integration. Returns the final JPEG directly.
         const userImg = await compressImage(state.capturedBlob, 0.95, 2048);
 
         const genForm = new FormData();
         genForm.append('userImage', userImg, 'photo.jpg');
-        genForm.append('prompt', state.selectedPreset.prompt);
+        genForm.append('presetId', String(state.selectedPreset.id));
 
         const genRes = await fetch('/api/generate', { method: 'POST', body: genForm });
         const genData = await genRes.json();
@@ -462,25 +421,13 @@ async function generate() {
             throw new Error(genData.details || genData.error || 'Generation failed');
         }
 
-        let finalDataUrl;
-        if (genData.note) {
-            // Mock-mode fallback: server returned the webcam photo unchanged.
-            finalDataUrl = `data:${genData.mimeType};base64,${genData.personImage || genData.generatedImage}`;
-            toast(genData.note, 'error', 6000);
-        } else {
-            const personDataUrl = `data:${genData.mimeType};base64,${genData.personImage}`;
-            const compositeBlob = await compositePersonOnto(
-                state.selectedPreset.backgroundUrl,
-                personDataUrl
-            );
-            finalDataUrl = URL.createObjectURL(compositeBlob);
-            toast('Your photo is ready!', 'success');
-        }
-
-        el.generatedImage.src = finalDataUrl;
+        el.generatedImage.src = `data:${genData.mimeType};base64,${genData.generatedImage}`;
         el.resultLocation.textContent = state.selectedPreset.name;
         el.loadingState.hidden = true;
         el.resultPanel.hidden = false;
+
+        if (genData.note) toast(genData.note, 'error', 6000);
+        else toast('Your photo is ready!', 'success');
     } catch (err) {
         console.error(err);
         toast(err.message || 'Generation failed. Please try again.', 'error', 6000);
@@ -592,3 +539,4 @@ if (document.readyState === 'loading') {
 } else {
     init();
 }
+
