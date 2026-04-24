@@ -34,23 +34,79 @@ function runMulter(req, res) {
     });
 }
 
-// Per-preset data: the background filename, a short setting noun for the
-// prompt, and gender-keyed outfit phrases. Kept deliberately terse — the
-// winning prompt that inspired this used just "maratha warrior".
+// Per-preset data: background filename, a setting noun, and gender-keyed
+// outfit phrases grounded in the actual history of each location.
+//  1-2  Khajuraho temples      → Chandela dynasty, 950-1050 CE
+//  3-4  Orchha Jahangir Mahal  → Bundela Rajput, 17th century (Mughal-era)
+//  5    Mandu Watchful Gates   → Malwa Sultanate, 15-16th c (Afghan-Turkic)
+//  6-9  Holkar chhatris        → Holkar Maratha dynasty, 18th century
+//  10-11 Rajwada palace        → Holkar royal seat, built 1747
+//  12-13 Kheoni Sanctuary      → modern wildlife sanctuary
 const PRESETS = {
-    1:  { bg: "Jagdambi Temple , Kandariya Mahadev Temple.jpg", setting: "temple", male: "rajput king",            female: "rajput queen in a traditional saree" },
-    2:  { bg: "Lakshmana Temple IMG_9753-HDR.jpg",              setting: "temple", male: "rajput king",            female: "rajput queen in a traditional saree" },
-    3:  { bg: "Jahangir Mahal 6 - Copy.jpg",                    setting: "palace courtyard", male: "bundela rajput warrior", female: "bundela princess in a red silk lehenga" },
-    4:  { bg: "jahangir gate orchha.jpg",                       setting: "palace gateway",   male: "bundela rajput warrior", female: "bundela princess in a maroon silk lehenga" },
-    5:  { bg: "Mandu’s Watchful Gates.jpg",                setting: "fort gateway",     male: "medieval warrior in dark robes and a turban", female: "malwa-era queen in a teal saree" },
-    6:  { bg: "Chattei River view (7).jpg",                     setting: "riverside chhatri", male: "maratha warrior", female: "maratha queen in a traditional burgundy nauvari saree" },
-    7:  { bg: "Chattri Monuments 1.jpg",                        setting: "chhatri monument", male: "maratha warrior", female: "peshwa-era lady in a traditional forest-green nauvari saree" },
-    8:  { bg: "Chattri Monuments 4.jpg",                        setting: "chhatri monument", male: "maratha warrior", female: "peshwa-era lady in a traditional deep-red nauvari saree" },
-    9:  { bg: "Krishnabai holkar chhatri .jpg",                 setting: "chhatri",          male: "maratha warrior", female: "holkar-era queen in a traditional royal-blue nauvari saree" },
-    10: { bg: "Rajwada Indore.jpg",                             setting: "palace",           male: "maratha king",    female: "holkar-era queen in a traditional peacock-green paithani saree" },
-    11: { bg: "RajWada 15.jpg",                                 setting: "palace courtyard", male: "maratha nobleman", female: "holkar-era royal lady in a traditional teal nauvari saree" },
-    12: { bg: "kheoni wildlife sanctuary .jpg",                 setting: "forest",           male: "wildlife safari explorer in a khaki shirt, cargo trousers and a wide-brim safari hat", female: "wildlife safari explorer in a khaki shirt, cargo trousers and a wide-brim safari hat" },
-    13: { bg: "kheoni wildlife sanctuary 1.jpg",                setting: "forest trail",     male: "wildlife safari explorer in a sand-beige shirt, khaki cargo trousers and a wide-brim safari hat", female: "wildlife safari explorer in a sand-beige shirt, khaki cargo trousers and a wide-brim safari hat" },
+    1:  { bg: "Jagdambi Temple , Kandariya Mahadev Temple.jpg",
+          setting: "ancient carved sandstone temple at Khajuraho",
+          male:   "chandela-era hindu devotee in a traditional white cotton dhoti, a saffron uttariya (shoulder cloth) draped over one shoulder, and a rudraksha mala",
+          female: "chandela-era noblewoman in a traditional ivory silk saree with a narrow gold border, classical temple gold jewellery (jhumka earrings, a thin choker and bangles) and a small red bindi" },
+
+    2:  { bg: "Lakshmana Temple IMG_9753-HDR.jpg",
+          setting: "10th-century Chandela sandstone temple at Khajuraho",
+          male:   "chandela-era nobleman in a cream cotton dhoti and unstitched shoulder cloth, a simple gold armlet and a rudraksha mala around the neck",
+          female: "chandela-era noblewoman in a soft mustard silk saree with a gold border, traditional temple gold jewellery and a small red bindi" },
+
+    3:  { bg: "Jahangir Mahal 6 - Copy.jpg",
+          setting: "17th-century Bundela palace courtyard at Orchha",
+          male:   "bundela rajput prince in a brocade cream angarkha, churidar pyjama, a colourful safa (rajput turban) and a kamarband (waist sash), with subtle gold jewellery",
+          female: "bundela rajput princess in a deep-red silk lehenga-choli with zari embroidery, a sheer dupatta draped over the head, traditional rajput gold jewellery (maang tikka, jhumkas, choker)" },
+
+    4:  { bg: "jahangir gate orchha.jpg",
+          setting: "monumental Mughal-era Bundela gateway at Orchha",
+          male:   "bundela rajput warrior in a saffron brocade angarkha, churidar pyjama, a colourful safa turban, a kamarband and a scabbarded sword at the waist",
+          female: "bundela rajput princess in a maroon silk lehenga with gold zari work, a sheer dupatta draped over the head and traditional rajput gold jewellery" },
+
+    5:  { bg: "Mandu’s Watchful Gates.jpg",
+          setting: "medieval Malwa Sultanate fort gateway at Mandu",
+          male:   "15th-century malwa sultanate nobleman in a long dark-indigo angarkha-style robe with a contrasting sash, churidar pyjama and a dark pagri turban, in the afghan-persian courtly style",
+          female: "rani roopmati-inspired malwa royal woman in a flowing teal silk anarkali gown with fine silver thread work, delicate silver jewellery and a sheer dupatta gracefully draped over the head" },
+
+    6:  { bg: "Chattei River view (7).jpg",
+          setting: "18th-century Maratha riverside chhatri on the Narmada at Maheshwar",
+          male:   "ahilyabai-era maratha nobleman in a crisp white cotton dhoti and bandgala-style kurta with a bright red pheta (maratha turban) and a simple shawl over one shoulder",
+          female: "ahilyabai-era maharashtrian lady in a traditional burgundy nauvari saree (9-yard drape), a gold nath (curved nose ring), thushi (short gold choker), green glass bangles, a pearl necklace and a red kumkum bindi" },
+
+    7:  { bg: "Chattri Monuments 1.jpg",
+          setting: "Maratha-era royal chhatri monument with carved sandstone columns",
+          male:   "peshwa-era maratha sardar in a cream cotton dhoti-kurta with a red pheta turban, a handlebar moustache and a simple brocade shawl",
+          female: "peshwa-era maharashtrian lady in a forest-green nauvari saree, a gold nath, thushi, traditional pearl jewellery and green glass bangles" },
+
+    8:  { bg: "Chattri Monuments 4.jpg",
+          setting: "Maratha-era domed royal chhatri",
+          male:   "holkar-era maratha nobleman in a white dhoti and cream kurta with a red pheta turban and a neatly twirled moustache",
+          female: "peshwa-era maharashtrian lady in a deep-red nauvari saree, a gold nath, thushi, pearl necklace and traditional green glass bangles" },
+
+    9:  { bg: "Krishnabai holkar chhatri .jpg",
+          setting: "18th-century Holkar royal chhatri at Maheshwar",
+          male:   "holkar-era maratha sardar in a cream cotton dhoti-kurta with a red pheta turban and a shawl draped over one shoulder",
+          female: "holkar-era maharashtrian queen in a royal-blue nauvari saree with gold border, a gold nath, thushi, pearl necklace and ornate traditional jewellery, styled after queen ahilyabai holkar" },
+
+    10: { bg: "Rajwada Indore.jpg",
+          setting: "18th-century seven-storey Holkar palace in Indore",
+          male:   "holkar-era maharaja in a cream brocade angarkha, churidar pyjama, a jewelled red pheta turban with a sarpech ornament, a kamarband and a pearl necklace",
+          female: "holkar-era maharani in a peacock-green paithani saree with a heavy gold zari border, a large gold nath, ornate thushi, a multi-strand pearl necklace, maang tikka and traditional regal jewellery" },
+
+    11: { bg: "RajWada 15.jpg",
+          setting: "inner courtyard of the 18th-century Holkar palace in Indore",
+          male:   "holkar-era maratha nobleman in a cream cotton dhoti-kurta with a red pheta turban and a simple shawl",
+          female: "holkar-era royal lady in a teal nauvari saree with a gold border, a gold nath, thushi, pearl necklace and traditional maharashtrian jewellery" },
+
+    12: { bg: "kheoni wildlife sanctuary .jpg",
+          setting: "central Indian teak and sal forest at Kheoni Wildlife Sanctuary",
+          male:   "modern wildlife safari explorer in a clean khaki short-sleeve shirt with a chest pocket, light beige cargo trousers, a wide-brim canvas safari hat and binoculars hanging around the neck",
+          female: "modern wildlife safari explorer in a clean khaki short-sleeve shirt with a chest pocket, light beige cargo trousers, a wide-brim canvas safari hat and binoculars hanging around the neck" },
+
+    13: { bg: "kheoni wildlife sanctuary 1.jpg",
+          setting: "forest trail through teak and bamboo at Kheoni Wildlife Sanctuary",
+          male:   "modern wildlife safari explorer in a sand-beige short-sleeve shirt with a chest pocket, khaki cargo trousers, a wide-brim canvas safari hat and binoculars hanging around the neck",
+          female: "modern wildlife safari explorer in a sand-beige short-sleeve shirt with a chest pocket, khaki cargo trousers, a wide-brim canvas safari hat and binoculars hanging around the neck" },
 };
 
 function buildPrompt(preset, gender) {
