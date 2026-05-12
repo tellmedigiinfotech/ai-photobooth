@@ -68,15 +68,17 @@ const presets = [
     { id: 2,  name: 'Khajuraho — Lakshmana Temple',   description: 'The finely carved 10th-century Chandela temple',   backgroundUrl: 'assets/backgrounds/Lakshmana Temple IMG_9753-HDR.jpg' },
     { id: 3,  name: 'Orchha — Jahangir Mahal',        description: '17th-century Bundela palace, arched courtyards',   backgroundUrl: 'assets/backgrounds/Jahangir Mahal 6 - Copy.jpg' },
     { id: 4,  name: 'Orchha — Jahangir Gate',         description: 'Monumental Bundela-Mughal archway',                backgroundUrl: 'assets/backgrounds/jahangir gate orchha.jpg' },
-    { id: 5,  name: 'Mandu — Watchful Gates',         description: 'Afghan-era fortress gateways of the Malwa Sultanate', backgroundUrl: 'assets/backgrounds/Mandu’s Watchful Gates.jpg' },
     { id: 6,  name: 'Maheshwar — Chhatri by the River', description: 'Holkar cenotaphs above the Narmada ghats',       backgroundUrl: 'assets/backgrounds/Chattei River view (7).jpg' },
-    { id: 7,  name: 'Holkar Chhatris I',              description: 'Domed sandstone cenotaphs with pillared verandas', backgroundUrl: 'assets/backgrounds/Chattri Monuments 1.jpg' },
-    { id: 8,  name: 'Holkar Chhatris II',             description: 'Regal silhouette of a domed royal cenotaph',       backgroundUrl: 'assets/backgrounds/Chattri Monuments 4.jpg' },
     { id: 9,  name: 'Krishnabai Holkar Chhatri',      description: "The queen's cenotaph above the Narmada, Maheshwar", backgroundUrl: 'assets/backgrounds/Krishnabai holkar chhatri .jpg' },
     { id: 10, name: 'Indore — Rajwada Palace',        description: 'The seven-storey Holkar palace of Indore',         backgroundUrl: 'assets/backgrounds/Rajwada Indore.jpg' },
     { id: 11, name: 'Indore — Rajwada Courtyard',     description: 'Inside the Holkar royal seat',                     backgroundUrl: 'assets/backgrounds/RajWada 15.jpg' },
-    { id: 12, name: 'Kheoni Sanctuary — Wilds of MP', description: 'Central Indian teak and sal forest',               backgroundUrl: 'assets/backgrounds/kheoni wildlife sanctuary .jpg' },
-    { id: 13, name: 'Kheoni Sanctuary — Forest Trail', description: 'Quiet woodland of teak, sal and bamboo',          backgroundUrl: 'assets/backgrounds/kheoni wildlife sanctuary 1.jpg' },
+    { id: 12, name: 'Kheoni Sanctuary — Wilds of MP', description: 'Central Indian teak and sal forest',               backgroundUrl: 'assets/backgrounds/kheoni wildlife sanctuary .jpg', genders: ['male'] },
+    { id: 13, name: 'Kheoni Sanctuary — Forest Trail', description: 'Quiet woodland of teak, sal and bamboo',          backgroundUrl: 'assets/backgrounds/kheoni wildlife sanctuary 1.jpg', genders: ['male'] },
+    { id: 14, name: 'Goa — Cabo de Rama Beach',       description: 'Palm-fringed Goan coast at golden-hour sunset',    backgroundUrl: 'assets/backgrounds/Cabo de Rama Beach_DSC9670.jpg' },
+    { id: 15, name: 'Goa — Cola Beach',               description: 'Rocky Goan shoreline framed by forested hills',    backgroundUrl: 'assets/backgrounds/Cola Beach_DSC9401.jpg' },
+    { id: 16, name: 'Goa — Salim Ali Bird Sanctuary', description: "Chorão Island's serene mangrove wetland",          backgroundUrl: 'assets/backgrounds/Dr. Salim Ali Bird Sanctuary_DSC8234.jpg' },
+    { id: 17, name: "Gulmarg — St. Mary's Church",    description: 'Heritage wooden church in a Kashmir alpine meadow', backgroundUrl: 'assets/backgrounds/Gulmarg landscapes .jpg' },
+    { id: 19, name: 'Gulmarg — Daisy Field',          description: 'Open pasture of daisies under Kashmir skies',      backgroundUrl: 'assets/backgrounds/Gulmarg landscapes 3.jpg' },
 ];
 
 // ═══════════════════════════════════════════════════════════════
@@ -230,9 +232,13 @@ function confirmCaptureAndAdvance() {
 //  Step 2: Destinations
 // ═══════════════════════════════════════════════════════════════
 
+function visiblePresets() {
+    return presets.filter(p => !p.genders || !state.selectedGender || p.genders.includes(state.selectedGender));
+}
+
 function renderDestinations() {
     const frag = document.createDocumentFragment();
-    presets.forEach(p => {
+    visiblePresets().forEach(p => {
         const card = document.createElement('button');
         card.type = 'button';
         card.className = 'destination-card';
@@ -271,6 +277,17 @@ function selectDestination(preset, cardEl) {
 function handleGenderChange(e) {
     const value = e.target.value;
     if (value === 'male' || value === 'female') state.selectedGender = value;
+
+    // Re-render destinations so gender-restricted presets disappear / reappear.
+    renderDestinations();
+
+    // If the previously selected preset is no longer visible for this gender,
+    // clear it so the user must pick again.
+    if (state.selectedPreset && !visiblePresets().some(p => p.id === state.selectedPreset.id)) {
+        state.selectedPreset = null;
+        el.selectedDestName.textContent = 'Nothing yet';
+    }
+
     updateGenerateEnabled();
 }
 

@@ -106,15 +106,26 @@
             </aside>
 
             <fieldset class="gender-toggle" aria-label="Your gender">
-                <legend class="gender-toggle__legend">I am</legend>
-                <label class="gender-toggle__option">
-                    <input type="radio" name="gender" value="male" />
-                    <span>Male</span>
-                </label>
-                <label class="gender-toggle__option">
-                    <input type="radio" name="gender" value="female" />
-                    <span>Female</span>
-                </label>
+                <legend class="gender-toggle__legend">
+                    <span class="gender-toggle__step">First</span>
+                    <span class="gender-toggle__prompt">Who's in the photo?</span>
+                </legend>
+                <div class="gender-toggle__options">
+                    <label class="gender-toggle__option">
+                        <input type="radio" name="gender" value="male" />
+                        <span class="gender-toggle__icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4Zm0 2c-3.3 0-8 1.7-8 5v3h16v-3c0-3.3-4.7-5-8-5Z"/></svg>
+                        </span>
+                        <span class="gender-toggle__label">Male</span>
+                    </label>
+                    <label class="gender-toggle__option">
+                        <input type="radio" name="gender" value="female" />
+                        <span class="gender-toggle__icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M12 2a5 5 0 0 0-1 9.9V14H8v2h3v3h2v-3h3v-2h-3v-2.1A5 5 0 0 0 12 2Zm0 2a3 3 0 1 1-3 3 3 3 0 0 1 3-3Z"/></svg>
+                        </span>
+                        <span class="gender-toggle__label">Female</span>
+                    </label>
+                </div>
             </fieldset>
 
             <div class="destinations" id="presetsGrid" role="radiogroup" aria-label="Heritage destinations">
