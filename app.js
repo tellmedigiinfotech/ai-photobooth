@@ -81,6 +81,34 @@ const presets = [
     { id: 19, name: 'Gulmarg — Daisy Field',          description: 'Open pasture of daisies under Kashmir skies',      backgroundUrl: 'assets/backgrounds/Gulmarg landscapes 3.jpg' },
 ];
 
+// ── Branding overlay ────────────────────────────────────────────
+// Logo + experience locations are composited onto the generated image
+// client-side via canvas — no model involvement, deterministic output,
+// works at full 2K resolution.
+const BRAND_LOGO_SRC = 'assets/brand/aakhon-dekha-logo.png';
+const BRAND_LOCATIONS = ['Bhopal', 'Orchha', 'Maheshwar', 'Boat Club'];
+
+let brandLogoImage = null;
+let brandLogoPromise = null;
+
+function loadImage(src) {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error(`Failed to load image: ${src}`));
+        img.src = src;
+    });
+}
+
+function preloadBrandLogo() {
+    if (brandLogoPromise) return brandLogoPromise;
+    brandLogoPromise = loadImage(BRAND_LOGO_SRC)
+        .then(img => { brandLogoImage = img; return img; })
+        .catch(err => { console.warn('Brand logo preload failed:', err); return null; });
+    return brandLogoPromise;
+}
+
 // ═══════════════════════════════════════════════════════════════
 //  Initialisation
 // ═══════════════════════════════════════════════════════════════
@@ -90,6 +118,7 @@ function init() {
     wireEvents();
     loadCameraDevices();
     checkHealth();
+    preloadBrandLogo();
     if (el.yearSpan) el.yearSpan.textContent = new Date().getFullYear();
 }
 
@@ -322,6 +351,96 @@ async function compressImage(blob, quality = 0.9, maxWidth = 1600) {
     });
 }
 
+// Composite the brand logo (top-left, rounded plate) and the experience
+// locations (bottom-center, dark translucent pill) onto the generated photo.
+// Sizes are proportional to the image so the overlay reads the same on
+// any output resolution.
+function drawRoundedRect(ctx, x, y, w, h, r) {
+    const radius = Math.min(r, w / 2, h / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + radius, y);
+    ctx.arcTo(x + w, y,     x + w, y + h, radius);
+    ctx.arcTo(x + w, y + h, x,     y + h, radius);
+    ctx.arcTo(x,     y + h, x,     y,     radius);
+    ctx.arcTo(x,     y,     x + w, y,     radius);
+    ctx.closePath();
+}
+
+async function brandifyImage(dataUrl) {
+    const photo = await loadImage(dataUrl);
+    const logo  = await preloadBrandLogo();
+
+    const W = photo.naturalWidth;
+    const H = photo.naturalHeight;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = W;
+    canvas.height = H;
+    const ctx = canvas.getContext('2d');
+
+    // 1. Base photo
+    ctx.drawImage(photo, 0, 0, W, H);
+
+    // 2. Logo on a slightly-rounded cream plate, top-left
+    if (logo) {
+        const plateW    = Math.round(W * 0.26);
+        const innerPad  = Math.round(plateW * 0.07);
+        const logoAR    = logo.naturalWidth / logo.naturalHeight;
+        const logoW     = plateW - innerPad * 2;
+        const logoH     = Math.round(logoW / logoAR);
+        const plateH    = logoH + innerPad * 2;
+        const plateX    = Math.round(W * 0.035);
+        const plateY    = Math.round(H * 0.028);
+        const plateR    = Math.max(14, Math.round(plateW * 0.06));
+
+        ctx.save();
+        ctx.shadowColor   = 'rgba(0, 0, 0, 0.32)';
+        ctx.shadowBlur    = Math.round(plateW * 0.05);
+        ctx.shadowOffsetY = Math.round(plateW * 0.012);
+        ctx.fillStyle     = 'rgba(255, 252, 246, 0.94)';
+        drawRoundedRect(ctx, plateX, plateY, plateW, plateH, plateR);
+        ctx.fill();
+        ctx.restore();
+
+        ctx.drawImage(logo, plateX + innerPad, plateY + innerPad, logoW, logoH);
+    }
+
+    // 3. Locations pill, bottom-center
+    const text     = BRAND_LOCATIONS.join('   ·   ');
+    const fontSize = Math.max(18, Math.round(H * 0.022));
+    const fontSpec = `500 ${fontSize}px "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
+
+    ctx.font         = fontSpec;
+    ctx.textAlign    = 'center';
+    ctx.textBaseline = 'middle';
+
+    const textW    = ctx.measureText(text).width;
+    const pillPadX = Math.round(fontSize * 1.4);
+    const pillPadY = Math.round(fontSize * 0.6);
+    const pillW    = Math.round(textW + pillPadX * 2);
+    const pillH    = fontSize + pillPadY * 2;
+    const pillX    = Math.round((W - pillW) / 2);
+    const pillY    = Math.round(H - pillH - H * 0.04);
+    const pillR    = pillH / 2;
+
+    ctx.save();
+    ctx.shadowColor   = 'rgba(0, 0, 0, 0.4)';
+    ctx.shadowBlur    = Math.round(H * 0.012);
+    ctx.shadowOffsetY = Math.round(H * 0.003);
+    ctx.fillStyle     = 'rgba(0, 0, 0, 0.62)';
+    drawRoundedRect(ctx, pillX, pillY, pillW, pillH, pillR);
+    ctx.fill();
+    ctx.restore();
+
+    ctx.font         = fontSpec;
+    ctx.textAlign    = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle    = '#fff';
+    ctx.fillText(text, W / 2, pillY + pillH / 2 + 1);
+
+    return canvas.toDataURL('image/jpeg', 0.95);
+}
+
 const LOADING_HINTS = [
     'Setting the scene…',
     'Tailoring your outfit…',
@@ -368,7 +487,15 @@ async function generate() {
             throw new Error(genData.details || genData.error || 'Generation failed');
         }
 
-        el.generatedImage.src = `data:${genData.mimeType};base64,${genData.generatedImage}`;
+        const rawDataUrl = `data:${genData.mimeType};base64,${genData.generatedImage}`;
+        let finalDataUrl;
+        try {
+            finalDataUrl = await brandifyImage(rawDataUrl);
+        } catch (overlayErr) {
+            console.warn('Brand overlay failed, falling back to raw image:', overlayErr);
+            finalDataUrl = rawDataUrl;
+        }
+        el.generatedImage.src = finalDataUrl;
         el.resultLocation.textContent = state.selectedPreset.name;
         el.loadingState.hidden = true;
         el.resultPanel.hidden = false;
