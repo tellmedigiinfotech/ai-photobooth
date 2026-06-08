@@ -558,7 +558,7 @@ async function generate() {
 
         // Give the user a moment to enjoy the result, then surface the
         // feedback prompt as a modal popup.
-        setTimeout(openFeedback, 1500);
+        setTimeout(openFeedback, 3000);
     } catch (err) {
         console.error(err);
         toast(err.message || 'Generation failed. Please try again.', 'error', 6000);
