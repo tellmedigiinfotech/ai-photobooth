@@ -1,326 +1,673 @@
-// Global state
-let stream = null;
-let capturedImageBlob = null;
-let selectedPreset = null;
+// ═════════════════════════════════════════════════════════════════
+//  AI Photobooth — Heritage edition
+//  Three-step wizard: Capture → Choose → Reveal
+// ═════════════════════════════════════════════════════════════════
 
-// DOM Elements
-const webcam = document.getElementById('webcam');
-const canvas = document.getElementById('canvas');
-const cameraPlaceholder = document.getElementById('camera-placeholder');
-const startCameraBtn = document.getElementById('startCamera');
-const captureBtn = document.getElementById('captureBtn');
-const retakeBtn = document.getElementById('retakeBtn');
-const capturedImageContainer = document.getElementById('capturedImageContainer');
-const capturedImage = document.getElementById('capturedImage');
-const presetsGrid = document.getElementById('presetsGrid');
-const selectedPresetInfo = document.getElementById('selectedPresetInfo');
-const presetName = document.getElementById('presetName');
-const presetDescription = document.getElementById('presetDescription');
-const generateBtn = document.getElementById('generateBtn');
-const loadingState = document.getElementById('loadingState');
-const resultPanel = document.getElementById('resultPanel');
-const generatedImage = document.getElementById('generatedImage');
-const printBtn = document.getElementById('printBtn');
-const newPhotoBtn = document.getElementById('newPhotoBtn');
-const statusMessage = document.getElementById('statusMessage');
+// ── State ────────────────────────────────────────────────────────
+const state = {
+    step: 1,
+    stream: null,
+    capturedBlob: null,
+    capturedUrl: null,
+    selectedPreset: null,
+    selectedGender: null,
+    cameraDevices: [],
+};
 
-// Preset configurations
+// ── DOM ──────────────────────────────────────────────────────────
+const $ = (id) => document.getElementById(id);
+
+const el = {
+    stepperItems: document.querySelectorAll('.stepper__item'),
+    stepSections: document.querySelectorAll('.step'),
+
+    // Step 1
+    webcam:             $('webcam'),
+    canvas:             $('canvas'),
+    cameraPlaceholder:  $('cameraPlaceholder'),
+    startCameraBtn:     $('startCameraBtn'),
+    captureControls:    $('captureControls'),
+    cameraSourceField:  $('cameraSourceField'),
+    cameraSelect:       $('cameraSelect'),
+    captureBtn:         $('captureBtn'),
+    captureView:        document.querySelector('.capture-view'),
+    captureReview:      $('captureReview'),
+    capturedImage:      $('capturedImage'),
+    retakeBtn:          $('retakeBtn'),
+    toStep2Btn:         $('toStep2Btn'),
+
+    // Step 2
+    contextPhoto:       $('contextPhoto'),
+    editPhotoBtn:       $('editPhotoBtn'),
+    genderRadios:       document.querySelectorAll('input[name="gender"]'),
+    presetsGrid:        $('presetsGrid'),
+    generateBtn:        $('generateBtn'),
+    selectedDestName:   $('selectedDestinationName'),
+
+    // Step 3
+    loadingState:       $('loadingState'),
+    loadingHint:        $('loadingHint'),
+    resultPanel:        $('resultPanel'),
+    generatedImage:     $('generatedImage'),
+    resultLocation:     $('resultLocation'),
+    newPhotoBtn:        $('newPhotoBtn'),
+    downloadBtn:        $('downloadBtn'),
+    shareWhatsAppBtn:   $('shareWhatsAppBtn'),
+    printBtn:           $('printBtn'),
+
+    toast:              $('toast'),
+    yearSpan:           $('yearSpan'),
+};
+
+// ── Presets ──────────────────────────────────────────────────────
+// Display data only — the actual prompt template + outfit per gender
+// lives server-side in api/generate.js (PRESETS). The client just sends
+// presetId + gender.
 const presets = [
-    {
-        id: 1,
-        name: 'Royal Palace',
-        description: 'Transform into royalty at a majestic palace',
-        prompt: 'Using the first image as a reference photo of a real person, generate a new hyper-realistic photograph of this EXACT SAME person standing inside a grand Indian royal palace. The person must wear an ornate royal Scindhia-style sherwani with gold embroidery, royal turban with jeweled brooch, and stand with a confident regal posture near an ornate throne chair. CRITICAL: Preserve the person\'s exact face shape, skin tone, eye color, nose structure, jawline, hair texture, and all unique facial features with photographic accuracy. The background should be the palace interior from the second reference image. Lighting should be warm, golden, cinematic. Shot as a professional portrait photograph with shallow depth of field.',
-        backgroundUrl: 'assets/backgrounds/palace.jpg'
-    },
-    {
-        id: 2,
-        name: 'Taj Mahal',
-        description: 'Stand before the iconic Taj Mahal',
-        prompt: 'Using the first image as a reference photo of a real person, generate a new hyper-realistic photograph of this EXACT SAME person standing on the main walkway leading to the Taj Mahal. The person must wear an elegant traditional Indian outfit — a richly embroidered cream and gold sherwani for men or an embellished anarkali suit for women. CRITICAL: Preserve the person\'s exact face shape, skin tone, eye color, nose structure, jawline, hair texture, and all unique facial features with photographic accuracy. The Taj Mahal should be visible behind them matching the second reference image. Golden hour lighting with soft warm tones. Shot as a high-end travel portrait with the monument in soft focus behind.',
-        backgroundUrl: 'assets/backgrounds/taj-mahal.jpg'
-    },
-    {
-        id: 3,
-        name: 'Jaipur Fort',
-        description: 'Experience the grandeur of Rajasthan',
-        prompt: 'Using the first image as a reference photo of a real person, generate a new hyper-realistic photograph of this EXACT SAME person standing at a magnificent Rajasthani fort. The person must wear a vibrant traditional Rajasthani royal outfit with a colorful bandhani turban, mirror-work jacket, and dhoti-kurta for men or a heavily embroidered lehenga choli for women. CRITICAL: Preserve the person\'s exact face shape, skin tone, eye color, nose structure, jawline, hair texture, and all unique facial features with photographic accuracy. The fort architecture from the second reference image should form the background. Bright daylight with dramatic shadows on sandstone walls. Professional portrait photography style.',
-        backgroundUrl: 'assets/backgrounds/jaipur-fort.jpg'
-    },
-    {
-        id: 4,
-        name: 'Mumbai Gateway',
-        description: 'Iconic Gateway of India backdrop',
-        prompt: 'Using the first image as a reference photo of a real person, generate a new hyper-realistic photograph of this EXACT SAME person standing in front of the Gateway of India monument in Mumbai. The person must wear a sophisticated, well-fitted modern Indian formal outfit — a tailored Nehru jacket with silk kurta for men or an elegant contemporary saree for women. CRITICAL: Preserve the person\'s exact face shape, skin tone, eye color, nose structure, jawline, hair texture, and all unique facial features with photographic accuracy. The Gateway of India from the second reference image should be visible behind. Late afternoon light with warm golden tones reflecting off the harbour. Cinematic portrait style.',
-        backgroundUrl: 'assets/backgrounds/gateway.jpg'
-    },
-    {
-        id: 5,
-        name: 'Mysore Palace',
-        description: 'Royal Mysore Palace setting',
-        prompt: 'Using the first image as a reference photo of a real person, generate a new hyper-realistic photograph of this EXACT SAME person standing inside the lavish Mysore Palace. The person must wear a traditional South Indian royal silk outfit — a richly woven Mysore silk gold-bordered dhoti and angavastram for men or a stunning Kanjeevaram silk saree with temple jewelry for women. CRITICAL: Preserve the person\'s exact face shape, skin tone, eye color, nose structure, jawline, hair texture, and all unique facial features with photographic accuracy. The ornate palace interior from the second reference image should be the backdrop. Warm interior lighting with golden chandeliers. Royal portrait photography style.',
-        backgroundUrl: 'assets/backgrounds/mysore.jpg'
-    },
-    {
-        id: 6,
-        name: 'Red Fort',
-        description: 'Historic Red Fort in Delhi',
-        prompt: 'Using the first image as a reference photo of a real person, generate a new hyper-realistic photograph of this EXACT SAME person standing at the Red Fort in Delhi. The person must wear opulent Mughal-era inspired clothing — a richly embroidered brocade achkan with a jeweled belt and ornate juttis for men or an elaborate Mughal-style anarkali with kundan jewelry for women. CRITICAL: Preserve the person\'s exact face shape, skin tone, eye color, nose structure, jawline, hair texture, and all unique facial features with photographic accuracy. The Red Fort\'s iconic red sandstone walls from the second reference image should be the background. Dramatic sunset lighting. High-end editorial portrait style.',
-        backgroundUrl: 'assets/backgrounds/red-fort.jpg'
-    },
-    {
-        id: 7,
-        name: 'Hawa Mahal',
-        description: 'The Palace of Winds',
-        prompt: 'Using the first image as a reference photo of a real person, generate a new hyper-realistic photograph of this EXACT SAME person standing in front of the Hawa Mahal (Palace of Winds) in Jaipur. The person must wear a stunning traditional Rajasthani outfit — a vivid saffron or maroon royal achkan with a Rajputi turban for men or an exquisite bandhani print ghagra choli with silver jewelry for women. CRITICAL: Preserve the person\'s exact face shape, skin tone, eye color, nose structure, jawline, hair texture, and all unique facial features with photographic accuracy. The honeycomb facade of Hawa Mahal from the second reference image should fill the background. Morning golden light. Architectural portrait photography.',
-        backgroundUrl: 'assets/backgrounds/hawa-mahal.jpg'
-    },
-    {
-        id: 8,
-        name: 'Amber Fort',
-        description: 'Majestic Amber Fort experience',
-        prompt: 'Using the first image as a reference photo of a real person, generate a new hyper-realistic photograph of this EXACT SAME person standing at the grand Amber Fort in Jaipur. The person must wear a regal Rajasthani warrior-prince outfit — an embroidered velvet jacket with gold buttons, fitted churidar, and a jeweled turban for men or a royal Rajputi poshak with heavy silver jewelry for women. CRITICAL: Preserve the person\'s exact face shape, skin tone, eye color, nose structure, jawline, hair texture, and all unique facial features with photographic accuracy. The majestic Amber Fort architecture from the second reference image should be the backdrop. Dramatic daylight with warm amber tones on stone walls. Epic cinematic portrait.',
-        backgroundUrl: 'assets/backgrounds/amber-fort.jpg'
-    }
+    { id: 5,  name: 'Bhimbetka Rock Shelters',        description: 'Prehistoric sandstone overhang, 30,000 BCE',       backgroundUrl: 'assets/backgrounds/bhimbetka-rock-shelter.jpg' },
+    { id: 1,  name: 'Kandariya Mahadev Temple - Khajuraho',  description: 'UNESCO-listed Chandela-era sandstone temples',     backgroundUrl: 'assets/backgrounds/jagdambi-temple-kandariya-mahadev-temple.jpg' },
+    { id: 2,  name: 'Lakshmana Temple - Khajuraho',   description: 'The finely carved 10th-century Chandela temple',   backgroundUrl: 'assets/backgrounds/lakshmana-temple-img-9753-hdr.jpg' },
+    { id: 7,  name: 'The Great Sanchi Stupa',                   description: 'UNESCO Buddhist monument with carved toranas',     backgroundUrl: 'assets/backgrounds/sanchi-stupa.jpg' },
+    { id: 3,  name: 'Jahangir Mahal - Orchha',        description: '17th-century Bundela palace, arched courtyards',   backgroundUrl: 'assets/backgrounds/jahangir-mahal-6-copy.jpg' },
+    { id: 4,  name: 'Jahangir Mahal - Orchha',         description: 'Monumental Bundela-Mughal archway',                backgroundUrl: 'assets/backgrounds/jahangir-gate-orchha.jpg' },
+    { id: 8,  name: 'Jahaz Mahal - Mandu',            description: 'Ship Palace of the Royal Enclave, monsoon mood',   backgroundUrl: 'assets/backgrounds/jahaz-mahal-mandu.jpg' },
+    { id: 6,  name: 'Chhatris by the Betwa River - Orchha', description: 'Holkar cenotaphs above the Narmada ghats',       backgroundUrl: 'assets/backgrounds/chattei-river-view-7.jpg' },
+    { id: 9,  name: 'Krishnabai Holkar Chhatri - Indore',      description: "The queen's cenotaph above the Narmada, Maheshwar", backgroundUrl: 'assets/backgrounds/krishnabai-holkar-chhatri.jpg' },
+    { id: 10, name: 'Rajwada Palace - Indore',        description: 'The seven-storey Holkar palace of Indore',         backgroundUrl: 'assets/backgrounds/rajwada-indore.jpg' },
+    { id: 11, name: 'Rajwada Palace -Indore',     description: 'Inside the Holkar royal seat',                     backgroundUrl: 'assets/backgrounds/rajwada-15.jpg' },
+    { id: 14, name: 'Shesh Shaiya Vishnu - Bandhavgarh',     description: 'Reclining Vishnu in deep Bandhavgarh jungle',      backgroundUrl: 'assets/backgrounds/shesh-shaiya-bandhavgarh.jpg' },
+    // { id: 12, name: 'Kheoni Sanctuary — Wilds of MP', description: 'Central Indian teak and sal forest',               backgroundUrl: 'assets/backgrounds/kheoni-wildlife-sanctuary.jpg', genders: ['male'] },
+    { id: 13, name: 'Kheoni Wildlife Sanctuary', description: 'Quiet woodland of teak, sal and bamboo',          backgroundUrl: 'assets/backgrounds/kheoni-wildlife-sanctuary-1.jpg', genders: ['male'] },
 ];
 
-// Initialize the application
+// ── Branding overlay ────────────────────────────────────────────
+// Two circular logos are composited onto the generated image client-side
+// via canvas: DAAMS (Madhya Pradesh Directorate of Archaeology) top-left,
+// Aakhon Dekha top-right. The bottom caption shows the actual heritage
+// location of the photo. Deterministic, no model involvement.
+const BRAND_LOGO_LEFT_SRC  = 'assets/brand/daams-logo.png';
+const BRAND_LOGO_RIGHT_SRC = 'assets/brand/aakhon-dekha-final.png';
+
+let brandLogoLeftImage = null;
+let brandLogoRightImage = null;
+let brandLogosPromise = null;
+
+function loadImage(src) {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error(`Failed to load image: ${src}`));
+        img.src = src;
+    });
+}
+
+// Read a Blob into a base64 data URL — used to send the captured photo to
+// the API as JSON (more reliable on Vercel than multipart/form-data).
+function blobToDataUrl(blob) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(new Error('Failed to read image data'));
+        reader.readAsDataURL(blob);
+    });
+}
+
+function preloadBrandLogos() {
+    if (brandLogosPromise) return brandLogosPromise;
+    brandLogosPromise = Promise.all([
+        loadImage(BRAND_LOGO_LEFT_SRC).catch(err => { console.warn('Left logo failed:', err); return null; }),
+        loadImage(BRAND_LOGO_RIGHT_SRC).catch(err => { console.warn('Right logo failed:', err); return null; }),
+    ]).then(([left, right]) => {
+        brandLogoLeftImage = left;
+        brandLogoRightImage = right;
+        return [left, right];
+    });
+    return brandLogosPromise;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  Initialisation
+// ═══════════════════════════════════════════════════════════════
+
 function init() {
-    loadPresets();
-    attachEventListeners();
-    checkServerHealth();
+    renderDestinations();
+    wireEvents();
+    loadCameraDevices();
+    checkHealth();
+    preloadBrandLogos();
+    if (el.yearSpan) el.yearSpan.textContent = new Date().getFullYear();
 }
 
-// Check server health and API status
-async function checkServerHealth() {
+async function checkHealth() {
     try {
-        const response = await fetch('/api/health');
-        const data = await response.json();
-
+        const r = await fetch('/api/health');
+        const data = await r.json();
         if (!data.apiKeyConfigured) {
-            showStatus('API key not configured. Using mock mode for testing.', 'error', 5000);
+            toast('Running in mock mode — no API key configured.', 'error', 5000);
         }
-    } catch (error) {
-        console.error('Server health check failed:', error);
+    } catch (_) { /* silent; user will see failures when they generate */ }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  Step navigation
+// ═══════════════════════════════════════════════════════════════
+
+function goToStep(n) {
+    state.step = n;
+
+    // Sections
+    el.stepSections.forEach(section => {
+        const thisStep = Number(section.dataset.step);
+        section.hidden = (thisStep !== n);
+    });
+
+    // Stepper
+    el.stepperItems.forEach(item => {
+        const thisStep = Number(item.dataset.step);
+        item.classList.toggle('is-active', thisStep === n);
+        item.classList.toggle('is-done', thisStep < n);
+    });
+
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  Step 1: Camera & capture
+// ═══════════════════════════════════════════════════════════════
+
+async function loadCameraDevices() {
+    if (!navigator.mediaDevices?.enumerateDevices) return;
+    try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        state.cameraDevices = devices.filter(d => d.kind === 'videoinput');
+        populateCameraSelect();
+    } catch (err) {
+        console.error('Failed to enumerate cameras:', err);
     }
 }
 
-// Load presets into the grid
-function loadPresets() {
-    presetsGrid.innerHTML = '';
-
-    presets.forEach(preset => {
-        const presetCard = document.createElement('div');
-        presetCard.className = 'preset-card';
-        presetCard.dataset.presetId = preset.id;
-
-        presetCard.innerHTML = `
-            <img src="${preset.backgroundUrl}" alt="${preset.name}" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22400%22 height=%22300%22%3E%3Crect fill=%22%23667eea%22 width=%22400%22 height=%22300%22/%3E%3Ctext x=%2250%25%22 y=%2250%25%22 dominant-baseline=%22middle%22 text-anchor=%22middle%22 font-family=%22Arial%22 font-size=%2224%22 fill=%22white%22%3E${preset.name}%3C/text%3E%3C/svg%3E'">
-            <div class="preset-overlay">
-                <h4>${preset.name}</h4>
-                <p>${preset.description}</p>
-            </div>
-        `;
-
-        presetCard.addEventListener('click', () => selectPreset(preset));
-        presetsGrid.appendChild(presetCard);
+function populateCameraSelect() {
+    el.cameraSelect.innerHTML = '<option value="">Default camera</option>';
+    state.cameraDevices.forEach((d, i) => {
+        const opt = document.createElement('option');
+        opt.value = d.deviceId;
+        opt.textContent = d.label || `Camera ${i + 1}`;
+        el.cameraSelect.appendChild(opt);
     });
+    // Only show the source selector when there are multiple cameras
+    el.cameraSourceField.hidden = state.cameraDevices.length < 2;
 }
 
-// Select a preset
-function selectPreset(preset) {
-    selectedPreset = preset;
-
-    // Update UI
-    document.querySelectorAll('.preset-card').forEach(card => {
-        card.classList.remove('selected');
-    });
-
-    const selectedCard = document.querySelector(`[data-preset-id="${preset.id}"]`);
-    if (selectedCard) {
-        selectedCard.classList.add('selected');
-    }
-
-    // Show preset info
-    presetName.textContent = preset.name;
-    presetDescription.textContent = preset.description;
-    selectedPresetInfo.style.display = 'block';
-
-    // Enable generate button if image is captured
-    updateGenerateButton();
-
-    showStatus(`Selected: ${preset.name}`, 'success');
+function stopStream() {
+    if (!state.stream) return;
+    state.stream.getTracks().forEach(t => t.stop());
+    state.stream = null;
 }
 
-// Attach event listeners
-function attachEventListeners() {
-    startCameraBtn.addEventListener('click', startCamera);
-    captureBtn.addEventListener('click', capturePhoto);
-    retakeBtn.addEventListener('click', retakePhoto);
-    generateBtn.addEventListener('click', generateAIImage);
-    printBtn.addEventListener('click', printImage);
-    newPhotoBtn.addEventListener('click', resetApp);
-}
-
-// Start camera
 async function startCamera() {
     try {
-        stream = await navigator.mediaDevices.getUserMedia({
-            video: {
-                width: { ideal: 1920 },
-                height: { ideal: 1080 },
-                facingMode: 'user'
-            },
-            audio: false
-        });
+        stopStream();
+        const deviceId = el.cameraSelect.value;
+        const video = deviceId
+            ? { deviceId: { exact: deviceId }, width: { ideal: 1920 }, height: { ideal: 1080 } }
+            : { facingMode: 'user', width: { ideal: 1920 }, height: { ideal: 1080 } };
 
-        webcam.srcObject = stream;
-        webcam.classList.add('active');
-        cameraPlaceholder.style.display = 'none';
+        state.stream = await navigator.mediaDevices.getUserMedia({ video, audio: false });
+        el.webcam.srcObject = state.stream;
 
-        startCameraBtn.disabled = true;
-        captureBtn.disabled = false;
+        el.cameraPlaceholder.hidden = true;
+        el.captureControls.hidden = false;
+        el.captureView.dataset.state = 'live';
+        el.captureBtn.disabled = false;
 
-        showStatus('Camera started successfully!', 'success');
-    } catch (error) {
-        console.error('Error accessing camera:', error);
-        showStatus('Failed to access camera. Please check permissions.', 'error');
+        // Refresh labels (only available after permission granted)
+        await loadCameraDevices();
+    } catch (err) {
+        console.error('Camera error:', err);
+        toast('Could not access the camera. Check permissions.', 'error');
     }
 }
 
-// Capture photo
+async function handleCameraChange() {
+    if (!state.stream) return;
+    await startCamera();
+    toast('Camera switched.', 'success');
+}
+
 function capturePhoto() {
-    const context = canvas.getContext('2d');
-    canvas.width = webcam.videoWidth;
-    canvas.height = webcam.videoHeight;
+    const ctx = el.canvas.getContext('2d');
+    el.canvas.width = el.webcam.videoWidth;
+    el.canvas.height = el.webcam.videoHeight;
 
-    context.drawImage(webcam, 0, 0, canvas.width, canvas.height);
+    // Mirror horizontally to match the preview, so the saved shot matches what
+    // the user saw when they hit the shutter.
+    ctx.save();
+    ctx.translate(el.canvas.width, 0);
+    ctx.scale(-1, 1);
+    ctx.drawImage(el.webcam, 0, 0, el.canvas.width, el.canvas.height);
+    ctx.restore();
 
-    canvas.toBlob(blob => {
-        capturedImageBlob = blob;
-        capturedImage.src = URL.createObjectURL(blob);
-        capturedImageContainer.style.display = 'block';
+    el.canvas.toBlob(blob => {
+        if (!blob) { toast('Capture failed. Try again.', 'error'); return; }
+        state.capturedBlob = blob;
+        if (state.capturedUrl) URL.revokeObjectURL(state.capturedUrl);
+        state.capturedUrl = URL.createObjectURL(blob);
+        el.capturedImage.src = state.capturedUrl;
 
-        updateGenerateButton();
-        showStatus('Photo captured!', 'success');
+        // Flip to review state
+        el.captureView.hidden = true;
+        el.captureReview.hidden = false;
     }, 'image/jpeg', 0.95);
 }
 
-// Retake photo
 function retakePhoto() {
-    capturedImageBlob = null;
-    capturedImageContainer.style.display = 'none';
-    updateGenerateButton();
+    state.capturedBlob = null;
+    if (state.capturedUrl) { URL.revokeObjectURL(state.capturedUrl); state.capturedUrl = null; }
+    el.captureReview.hidden = true;
+    el.captureView.hidden = false;
 }
 
-// Update generate button state
-function updateGenerateButton() {
-    generateBtn.disabled = !(capturedImageBlob && selectedPreset);
+function confirmCaptureAndAdvance() {
+    if (!state.capturedBlob) return;
+    if (state.capturedUrl) el.contextPhoto.src = state.capturedUrl;
+    goToStep(2);
 }
 
-// Generate AI image
-async function generateAIImage() {
-    if (!capturedImageBlob || !selectedPreset) {
-        showStatus('Please capture a photo and select a preset', 'error');
+// ═══════════════════════════════════════════════════════════════
+//  Step 2: Destinations
+// ═══════════════════════════════════════════════════════════════
+
+function visiblePresets() {
+    return presets.filter(p => !p.genders || !state.selectedGender || p.genders.includes(state.selectedGender));
+}
+
+function renderDestinations() {
+    const frag = document.createDocumentFragment();
+    visiblePresets().forEach(p => {
+        const card = document.createElement('button');
+        card.type = 'button';
+        card.className = 'destination-card';
+        card.setAttribute('role', 'radio');
+        card.setAttribute('aria-checked', 'false');
+        card.dataset.presetId = p.id;
+        card.innerHTML = `
+            <div class="destination-card__media">
+                <img src="${p.backgroundUrl}" alt="" loading="lazy" />
+            </div>
+            <div class="destination-card__check" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path fill="currentColor" d="m9.55 17.575-4.95-4.95 1.414-1.414 3.536 3.536 7.07-7.071 1.415 1.414-8.485 8.485Z"/></svg>
+            </div>
+            <div class="destination-card__overlay">
+                <div class="destination-card__name">${escapeHtml(p.name)}</div>
+                <div class="destination-card__desc">${escapeHtml(p.description)}</div>
+            </div>`;
+        card.addEventListener('click', () => selectDestination(p, card));
+        frag.appendChild(card);
+    });
+    el.presetsGrid.innerHTML = '';
+    el.presetsGrid.appendChild(frag);
+}
+
+function selectDestination(preset, cardEl) {
+    state.selectedPreset = preset;
+    el.presetsGrid.querySelectorAll('.destination-card').forEach(c => {
+        const isSel = c === cardEl;
+        c.classList.toggle('is-selected', isSel);
+        c.setAttribute('aria-checked', isSel ? 'true' : 'false');
+    });
+    el.selectedDestName.textContent = preset.name;
+    updateGenerateEnabled();
+}
+
+function handleGenderChange(e) {
+    const value = e.target.value;
+    if (value === 'male' || value === 'female') state.selectedGender = value;
+
+    // Re-render destinations so gender-restricted presets disappear / reappear.
+    renderDestinations();
+
+    // If the previously selected preset is no longer visible for this gender,
+    // clear it so the user must pick again.
+    if (state.selectedPreset && !visiblePresets().some(p => p.id === state.selectedPreset.id)) {
+        state.selectedPreset = null;
+        el.selectedDestName.textContent = 'Nothing yet';
+    }
+
+    updateGenerateEnabled();
+}
+
+function updateGenerateEnabled() {
+    el.generateBtn.disabled = !(state.selectedPreset && state.selectedGender);
+}
+
+function escapeHtml(s) {
+    return s.replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  Step 3: Generation
+// ═══════════════════════════════════════════════════════════════
+
+async function compressImage(blob, quality = 0.9, maxWidth = 1600) {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => {
+            let { width, height } = img;
+            if (width > maxWidth) {
+                height = Math.round((height * maxWidth) / width);
+                width = maxWidth;
+            }
+            const c = document.createElement('canvas');
+            c.width = width; c.height = height;
+            c.getContext('2d').drawImage(img, 0, 0, width, height);
+            c.toBlob(b => b ? resolve(b) : reject(new Error('Compression failed')), 'image/jpeg', quality);
+        };
+        img.onerror = () => reject(new Error('Image load failed'));
+        img.src = URL.createObjectURL(blob);
+    });
+}
+
+// Composite the brand logo (top-right, circular badge with white ring) and
+// the bilingual tagline (bottom-center, dark translucent rounded plate)
+// onto the generated photo. Sizes are proportional to the image so the
+// overlay reads the same on any output resolution.
+function drawRoundedRect(ctx, x, y, w, h, r) {
+    const radius = Math.min(r, w / 2, h / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + radius, y);
+    ctx.arcTo(x + w, y,     x + w, y + h, radius);
+    ctx.arcTo(x + w, y + h, x,     y + h, radius);
+    ctx.arcTo(x,     y + h, x,     y,     radius);
+    ctx.arcTo(x,     y,     x + w, y,     radius);
+    ctx.closePath();
+}
+
+// Wait for the Eczar webfont to load before drawing — otherwise the canvas
+// silently substitutes a default font and the typography won't match the UI.
+async function ensureBrandFonts(captionSize) {
+    if (!document.fonts || !document.fonts.load) return;
+    try {
+        await document.fonts.load(`400 ${captionSize}px "Eczar"`);
+    } catch (_) { /* fall back to system fonts if Google Fonts fails */ }
+}
+
+// Each new logo is already designed as a circle with its own border/canvas,
+// so we clip+draw without an outer white ring and let the design speak.
+function drawCircularLogo(ctx, logo, cx, cy, diameter) {
+    if (!logo) return;
+    const r = diameter / 2;
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.closePath();
+    ctx.clip();
+    ctx.drawImage(logo, cx - r, cy - r, diameter, diameter);
+    ctx.restore();
+}
+
+async function brandifyImage(dataUrl, locationName) {
+    const photo = await loadImage(dataUrl);
+    const [leftLogo, rightLogo] = await preloadBrandLogos();
+
+    const W = photo.naturalWidth;
+    const H = photo.naturalHeight;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = W;
+    canvas.height = H;
+    const ctx = canvas.getContext('2d');
+
+    // 1. Base photo
+    ctx.drawImage(photo, 0, 0, W, H);
+
+    // 2. Two mirrored circular logo badges — DAAMS top-left, Aakhon Dekha
+    //    top-right. Same diameter, same vertical inset.
+    const badgeD = Math.round(W * 0.11);
+    const badgeR = badgeD / 2;
+    const inset  = Math.round(W * 0.03);
+    const cyTop  = Math.round(H * 0.03 + badgeR);
+    const cxLeft  = inset + badgeR;
+    const cxRight = W - inset - badgeR;
+
+    // Soft drop shadow drawn as a filled disc — gives both logos a
+    // consistent shadow shape regardless of their own transparency.
+    const drawShadowDisc = (cx, cy) => {
+        ctx.save();
+        ctx.shadowColor   = 'rgba(0, 0, 0, 0.45)';
+        ctx.shadowBlur    = Math.round(badgeD * 0.10);
+        ctx.shadowOffsetY = Math.round(badgeD * 0.025);
+        ctx.fillStyle     = 'rgba(0, 0, 0, 0.55)';
+        ctx.beginPath();
+        ctx.arc(cx, cy, badgeR, 0, Math.PI * 2);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+    };
+
+    if (leftLogo)  drawShadowDisc(cxLeft,  cyTop);
+    if (rightLogo) drawShadowDisc(cxRight, cyTop);
+
+    if (leftLogo)  drawCircularLogo(ctx, leftLogo,  cxLeft,  cyTop, badgeD);
+    if (rightLogo) drawCircularLogo(ctx, rightLogo, cxRight, cyTop, badgeD);
+
+    // 3. Bottom caption — the actual heritage location of the photo, in
+    //    Eczar Bold, on a soft dark gradient fade.
+    const caption = (locationName || '').trim();
+    if (caption) {
+        const captionSize = Math.max(16, Math.round(H * 0.022));
+        await ensureBrandFonts(captionSize);
+
+        const fontStack   = '"Eczar", "Tiro Devanagari Hindi", "Noto Serif Devanagari", "Kohinoor Devanagari", "Mangal", "Nirmala UI", Georgia, serif';
+        const captionFont = `400 ${captionSize}px ${fontStack}`;
+
+        // 3a. Gradient fade so text reads on any background
+        const gradHeight = Math.round(H * 0.18);
+        const gradTop    = H - gradHeight;
+        const gradient   = ctx.createLinearGradient(0, gradTop, 0, H);
+        gradient.addColorStop(0,    'rgba(0, 0, 0, 0)');
+        gradient.addColorStop(0.55, 'rgba(0, 0, 0, 0.28)');
+        gradient.addColorStop(1,    'rgba(0, 0, 0, 0.55)');
+        ctx.save();
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, gradTop, W, gradHeight);
+        ctx.restore();
+
+        // 3b. Caption text with drop shadow
+        const captionY = H - Math.round(H * 0.05);
+        ctx.save();
+        ctx.font          = captionFont;
+        ctx.textAlign     = 'right';
+        ctx.textBaseline  = 'alphabetic';
+        ctx.shadowColor   = 'rgba(0, 0, 0, 0.85)';
+        ctx.shadowBlur    = Math.round(H * 0.009);
+        ctx.shadowOffsetY = Math.round(H * 0.002);
+        ctx.fillStyle     = '#ffffff';
+        ctx.fillText(caption, W - inset, captionY);
+        ctx.restore();
+    }
+
+    return canvas.toDataURL('image/jpeg', 0.95);
+}
+
+const LOADING_HINTS = [
+    'Setting the scene…',
+    'Tailoring your outfit…',
+    'Matching light and shadows…',
+    'Adding the final touches…',
+    'Almost there…',
+];
+let loadingHintTimer = null;
+function startLoadingHints() {
+    let i = 0;
+    el.loadingHint.textContent = LOADING_HINTS[0];
+    loadingHintTimer = setInterval(() => {
+        i = (i + 1) % LOADING_HINTS.length;
+        el.loadingHint.textContent = LOADING_HINTS[i];
+    }, 4500);
+}
+function stopLoadingHints() {
+    clearInterval(loadingHintTimer);
+    loadingHintTimer = null;
+}
+
+async function generate() {
+    if (!state.capturedBlob || !state.selectedPreset || !state.selectedGender) {
+        toast('Please capture a photo, pick male/female, and choose a destination.', 'error');
         return;
     }
 
+    goToStep(3);
+    el.loadingState.hidden = false;
+    el.resultPanel.hidden = true;
+    startLoadingHints();
+
     try {
-        // Show loading state
-        loadingState.style.display = 'block';
-        generateBtn.disabled = true;
+        const userImg = await compressImage(state.capturedBlob, 0.9, 1600);
+        const userImageDataUrl = await blobToDataUrl(userImg);
 
-        // Prepare form data
-        const formData = new FormData();
-        formData.append('userImage', capturedImageBlob, 'photo.jpg');
-        formData.append('prompt', selectedPreset.prompt);
-
-        // Fetch background image if available
-        try {
-            const bgResponse = await fetch(selectedPreset.backgroundUrl);
-            if (bgResponse.ok) {
-                const bgBlob = await bgResponse.blob();
-                formData.append('backgroundImage', bgBlob, 'background.jpg');
-            }
-        } catch (error) {
-            console.log('Background image not available, proceeding without it');
-        }
-
-        showStatus('Creating your masterpiece with Gemini AI... This may take 15-30 seconds.', 'success', 60000);
-
-        // Single request to Gemini — no polling needed
-        const response = await fetch('/api/generate', {
+        const genRes = await fetch('/api/generate', {
             method: 'POST',
-            body: formData
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                userImage: userImageDataUrl,
+                presetId: String(state.selectedPreset.id),
+                gender: state.selectedGender,
+            }),
         });
-
-        const data = await response.json();
-
-        if (!response.ok || !data.success) {
-            throw new Error(data.details || data.error || 'Failed to generate image');
+        const genData = await genRes.json();
+        if (!genRes.ok || !genData.success) {
+            throw new Error(genData.details || genData.error || 'Generation failed');
         }
 
-        // Display generated image
-        const imageData = `data:${data.mimeType};base64,${data.generatedImage}`;
-        generatedImage.src = imageData;
-
-        resultPanel.style.display = 'block';
-        resultPanel.scrollIntoView({ behavior: 'smooth' });
-
-        if (data.note) {
-            showStatus(data.note, 'error', 8000);
-        } else {
-            showStatus('Image generated successfully!', 'success');
+        const rawDataUrl = `data:${genData.mimeType};base64,${genData.generatedImage}`;
+        let finalDataUrl;
+        try {
+            finalDataUrl = await brandifyImage(rawDataUrl, state.selectedPreset.name);
+        } catch (overlayErr) {
+            console.warn('Brand overlay failed, falling back to raw image:', overlayErr);
+            finalDataUrl = rawDataUrl;
         }
+        el.generatedImage.src = finalDataUrl;
+        el.resultLocation.textContent = state.selectedPreset.name;
+        el.loadingState.hidden = true;
+        el.resultPanel.hidden = false;
 
-    } catch (error) {
-        console.error('Error generating image:', error);
-        showStatus(error.message || 'Failed to generate image. Please try again.', 'error');
+        if (genData.note) toast(genData.note, 'error', 6000);
+        else toast('Your photo is ready!', 'success');
+    } catch (err) {
+        console.error(err);
+        toast(err.message || 'Generation failed. Please try again.', 'error', 6000);
+        // On failure, return to step 2 so the user can retry
+        el.loadingState.hidden = true;
+        goToStep(2);
     } finally {
-        loadingState.style.display = 'none';
-        generateBtn.disabled = false;
+        stopLoadingHints();
     }
 }
 
-// Print image
-function printImage() {
-    window.print();
+function download() {
+    if (!el.generatedImage.src) return;
+    const a = document.createElement('a');
+    a.href = el.generatedImage.src;
+    const safeName = (state.selectedPreset?.name || 'photobooth').replace(/[^\w-]+/g, '_');
+    a.download = `${safeName}-${Date.now()}.jpg`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
 }
 
-// Reset app for new photo
-function resetApp() {
-    capturedImageBlob = null;
-    selectedPreset = null;
+// Share to WhatsApp via the Web Share API (mobile — opens the native share
+// sheet where the user picks WhatsApp). On desktop, falls back to opening
+// WhatsApp Web with a prefilled text message and triggers a download so the
+// user can attach it manually, since wa.me URLs can't carry image payloads.
+async function shareWhatsApp() {
+    if (!el.generatedImage.src) return;
+    const locationName = state.selectedPreset?.name || 'the AI Photobooth';
+    const caption = `Here I am at ${locationName} — via the AI Photobooth!`;
 
-    capturedImageContainer.style.display = 'none';
-    selectedPresetInfo.style.display = 'none';
-    resultPanel.style.display = 'none';
+    try {
+        const response = await fetch(el.generatedImage.src);
+        const blob = await response.blob();
+        const file = new File([blob], `photobooth-${Date.now()}.jpg`, { type: blob.type || 'image/jpeg' });
 
-    document.querySelectorAll('.preset-card').forEach(card => {
-        card.classList.remove('selected');
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            await navigator.share({ files: [file], title: 'AI Photobooth', text: caption });
+            return;
+        }
+
+        // Desktop fallback — trigger a download and open WhatsApp Web with text.
+        download();
+        const url = `https://web.whatsapp.com/send?text=${encodeURIComponent(caption)}`;
+        window.open(url, '_blank');
+        toast('Image downloaded. Attach it in the WhatsApp window that just opened.', '', 5500);
+    } catch (err) {
+        if (err.name === 'AbortError') return; // user dismissed the share sheet
+        console.error('WhatsApp share failed:', err);
+        toast('Share failed — try downloading and sending manually.', 'error');
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  Reset
+// ═══════════════════════════════════════════════════════════════
+
+function resetAll() {
+    retakePhoto();
+    state.selectedPreset = null;
+    state.selectedGender = null;
+    el.presetsGrid.querySelectorAll('.destination-card').forEach(c => {
+        c.classList.remove('is-selected');
+        c.setAttribute('aria-checked', 'false');
+    });
+    el.genderRadios.forEach(r => { r.checked = false; });
+    el.selectedDestName.textContent = 'Nothing yet';
+    el.generateBtn.disabled = true;
+    goToStep(1);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  Toast
+// ═══════════════════════════════════════════════════════════════
+
+let toastTimer = null;
+function toast(message, type = '', duration = 3200) {
+    el.toast.textContent = message;
+    el.toast.className = 'toast is-visible' + (type ? ` is-${type}` : '');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.toast.classList.remove('is-visible'), duration);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  Events
+// ═══════════════════════════════════════════════════════════════
+
+function wireEvents() {
+    el.startCameraBtn.addEventListener('click', startCamera);
+    el.cameraSelect.addEventListener('change', handleCameraChange);
+    el.captureBtn.addEventListener('click', capturePhoto);
+    el.retakeBtn.addEventListener('click', retakePhoto);
+    el.toStep2Btn.addEventListener('click', confirmCaptureAndAdvance);
+
+    el.editPhotoBtn.addEventListener('click', () => {
+        retakePhoto();
+        goToStep(1);
     });
 
-    updateGenerateButton();
+    el.genderRadios.forEach(r => r.addEventListener('change', handleGenderChange));
 
-    // Scroll to top
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    el.generateBtn.addEventListener('click', generate);
 
-    showStatus('Ready for new photo!', 'success');
+    el.newPhotoBtn.addEventListener('click', resetAll);
+    el.downloadBtn.addEventListener('click', download);
+    el.shareWhatsAppBtn.addEventListener('click', shareWhatsApp);
+    el.printBtn.addEventListener('click', () => window.print());
 }
 
-// Show status message
-function showStatus(message, type = 'success', duration = 3000) {
-    statusMessage.textContent = message;
-    statusMessage.className = `status-message ${type} show`;
-
-    setTimeout(() => {
-        statusMessage.classList.remove('show');
-    }, duration);
-}
-
-// Initialize app when DOM is ready
+// Boot
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
 } else {
     init();
 }
+
