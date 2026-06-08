@@ -1139,6 +1139,9 @@ p { margin: 0; color: var(--c-ink-soft); }
     padding: var(--s-4);
     animation: feedbackFadeIn 180ms ease-out;
 }
+/* Belt-and-braces: make sure the `hidden` attribute actually hides the
+   modal, regardless of any same-specificity `display` rule above. */
+.feedback-overlay[hidden] { display: none !important; }
 @keyframes feedbackFadeIn {
     from { opacity: 0; }
     to   { opacity: 1; }

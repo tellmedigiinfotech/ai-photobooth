@@ -681,6 +681,9 @@ const feedback = {
     skipBtn: null,
     thanks: null,
     ratings: { rating1: 0, rating2: 0 },
+    // Once the user has submitted feedback in this page session we never
+    // auto-reopen the popup again — they're done, no point pestering them.
+    submittedThisSession: false,
 };
 
 // Stable anonymous user id so admin can spot repeat submitters without
@@ -736,6 +739,7 @@ function wireFeedback() {
 
 function openFeedback() {
     if (!feedback.overlay) return;
+    if (feedback.submittedThisSession) return;     // already given — don't re-prompt
     resetFeedback();
     feedback.overlay.hidden = false;
 }
@@ -790,6 +794,7 @@ async function submitFeedback() {
         if (!res.ok || !data.success) {
             throw new Error(data.details || data.error || 'Could not send feedback');
         }
+        feedback.submittedThisSession = true;
         feedback.panel.classList.add('is-submitted');
         feedback.thanks.hidden = false;
         // Give the user a beat to see the "Thank you" line, then close.
