@@ -55,6 +55,22 @@
         border-radius: 6px;
         background: #fff;
     }
+    .pw-wrap { position: relative; }
+    .pw-wrap input { padding-right: 40px; }
+    .pw-toggle {
+        position: absolute;
+        right: 4px;
+        top: 50%;
+        transform: translateY(-50%);
+        background: transparent;
+        border: 0;
+        padding: 6px 8px;
+        color: var(--muted);
+        cursor: pointer;
+        line-height: 0;
+    }
+    .pw-toggle:hover { color: var(--ink); }
+    .pw-toggle svg { width: 20px; height: 20px; display: block; }
     button {
         background: var(--accent);
         color: #fff;
@@ -126,7 +142,15 @@
 <main>
     <div class="gate" id="gate">
         <h2>Enter admin password</h2>
-        <input type="password" id="pwInput" autocomplete="current-password" placeholder="Password" autofocus />
+        <div class="pw-wrap">
+            <input type="password" id="pwInput" autocomplete="current-password" placeholder="Password" autofocus />
+            <button type="button" id="pwToggle" class="pw-toggle" aria-label="Show password" aria-pressed="false" title="Show password">
+                <svg id="pwEye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"/>
+                    <circle cx="12" cy="12" r="3"/>
+                </svg>
+            </button>
+        </div>
         <div class="row">
             <button id="loginBtn" style="flex:1">Sign in</button>
         </div>
@@ -235,6 +259,20 @@ $('loginBtn').addEventListener('click', () => {
     const pw = $('pwInput').value.trim();
     if (!pw) return;
     showBoard(pw);
+});
+$('pwToggle').addEventListener('click', () => {
+    const input = $('pwInput');
+    const btn = $('pwToggle');
+    const showing = input.type === 'text';
+    input.type = showing ? 'password' : 'text';
+    btn.setAttribute('aria-label', showing ? 'Show password' : 'Hide password');
+    btn.setAttribute('aria-pressed', String(!showing));
+    btn.title = showing ? 'Show password' : 'Hide password';
+    // Swap eye <-> eye-with-slash icon
+    $('pwEye').innerHTML = showing
+        ? '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"/><circle cx="12" cy="12" r="3"/>'
+        : '<path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a19.79 19.79 0 0 1 5.06-5.94M9.9 4.24A10.94 10.94 0 0 1 12 4c7 0 11 8 11 8a19.85 19.85 0 0 1-3.17 4.19"/><path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>';
+    input.focus();
 });
 $('pwInput').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') $('loginBtn').click();
