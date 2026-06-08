@@ -126,6 +126,45 @@
         padding: 40px;
         color: var(--muted);
     }
+    .thumb {
+        width: 60px;
+        height: 80px;
+        object-fit: cover;
+        border-radius: 4px;
+        border: 1px solid var(--border);
+        cursor: zoom-in;
+        background: #f4ecdd;
+        display: block;
+    }
+    .thumb-placeholder {
+        width: 60px;
+        height: 80px;
+        border-radius: 4px;
+        border: 1px dashed var(--border);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--muted);
+        font-size: 0.8rem;
+    }
+    .lightbox {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.85);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+        cursor: zoom-out;
+        padding: 24px;
+    }
+    .lightbox.is-open { display: flex; }
+    .lightbox img {
+        max-width: 100%;
+        max-height: 100%;
+        border-radius: 8px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    }
 </style>
 </head>
 <body>
@@ -166,6 +205,10 @@
         <div id="tableWrap"></div>
     </div>
 </main>
+
+<div id="lightbox" class="lightbox" role="dialog" aria-label="Image preview">
+    <img id="lightboxImg" alt="Full-size feedback image" />
+</div>
 
 <script>
 const $ = (id) => document.getElementById(id);
@@ -211,9 +254,12 @@ function render(items) {
     $('summary').innerHTML =
         `Average — image: <strong>${avg('rating1')}</strong> · share: <strong>${avg('rating2')}</strong>`;
 
-    const rows = items.map(x => `
+    const rows = items.map((x, i) => `
         <tr>
             <td class="muted">${esc(fmtDate(x.createdAt))}</td>
+            <td>${x.imageDataUrl
+                ? `<img class="thumb" src="${esc(x.imageDataUrl)}" alt="" data-idx="${i}" />`
+                : '<div class="thumb-placeholder">—</div>'}</td>
             <td>${esc(x.presetName || '—')}</td>
             <td>${esc(x.gender || '—')}</td>
             <td>${stars(x.rating1)}</td>
@@ -226,6 +272,7 @@ function render(items) {
             <thead>
                 <tr>
                     <th>Date</th>
+                    <th>Image</th>
                     <th>Destination</th>
                     <th>Gender</th>
                     <th>Liked image</th>
@@ -235,6 +282,21 @@ function render(items) {
             </thead>
             <tbody>${rows}</tbody>
         </table>`;
+
+    // Wire up click-to-enlarge for thumbnails
+    $('tableWrap').querySelectorAll('.thumb').forEach(t => {
+        t.addEventListener('click', () => openLightbox(t.src));
+    });
+}
+
+function openLightbox(src) {
+    const box = $('lightbox');
+    $('lightboxImg').src = src;
+    box.classList.add('is-open');
+}
+function closeLightbox() {
+    $('lightbox').classList.remove('is-open');
+    $('lightboxImg').src = '';
 }
 
 async function showBoard(pw) {
@@ -291,6 +353,11 @@ $('refreshBtn').addEventListener('click', async () => {
 $('logoutBtn').addEventListener('click', () => {
     sessionStorage.removeItem(PASS_KEY);
     location.reload();
+});
+
+$('lightbox').addEventListener('click', closeLightbox);
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeLightbox();
 });
 
 // Restore session
