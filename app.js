@@ -555,6 +555,10 @@ async function generate() {
 
         if (genData.note) toast(genData.note, 'error', 6000);
         else toast('Your photo is ready!', 'success');
+
+        // Give the user a moment to enjoy the result, then surface the
+        // feedback prompt as a modal popup.
+        setTimeout(openFeedback, 1500);
     } catch (err) {
         console.error(err);
         toast(err.message || 'Generation failed. Please try again.', 'error', 6000);
@@ -623,7 +627,7 @@ function resetAll() {
     el.genderRadios.forEach(r => { r.checked = false; });
     el.selectedDestName.textContent = 'Nothing yet';
     el.generateBtn.disabled = true;
-    resetFeedback();
+    closeFeedback();
     goToStep(1);
 }
 
@@ -696,9 +700,11 @@ function getAnonId() {
 }
 
 function wireFeedback() {
+    feedback.overlay   = $('feedbackOverlay');
     feedback.panel     = $('feedbackPanel');
     feedback.submitBtn = $('submitFeedbackBtn');
     feedback.skipBtn   = $('skipFeedbackBtn');
+    feedback.closeBtn  = $('feedbackCloseBtn');
     feedback.thanks    = $('feedbackThanks');
     if (!feedback.panel) return;
 
@@ -716,6 +722,27 @@ function wireFeedback() {
 
     feedback.submitBtn.addEventListener('click', submitFeedback);
     feedback.skipBtn.addEventListener('click', skipFeedback);
+    feedback.closeBtn.addEventListener('click', closeFeedback);
+
+    // Click on the dark backdrop (but not the card itself) closes the modal
+    feedback.overlay.addEventListener('click', (e) => {
+        if (e.target === feedback.overlay) closeFeedback();
+    });
+    // Esc closes the modal whenever it's open
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !feedback.overlay.hidden) closeFeedback();
+    });
+}
+
+function openFeedback() {
+    if (!feedback.overlay) return;
+    resetFeedback();
+    feedback.overlay.hidden = false;
+}
+function closeFeedback() {
+    if (!feedback.overlay) return;
+    feedback.overlay.hidden = true;
+    resetFeedback();
 }
 
 function updateFeedbackSubmitState() {
@@ -765,6 +792,8 @@ async function submitFeedback() {
         }
         feedback.panel.classList.add('is-submitted');
         feedback.thanks.hidden = false;
+        // Give the user a beat to see the "Thank you" line, then close.
+        setTimeout(closeFeedback, 1600);
     } catch (err) {
         console.error('Feedback failed:', err);
         toast(err.message || 'Could not send feedback', 'error', 4000);
@@ -774,9 +803,7 @@ async function submitFeedback() {
 }
 
 function skipFeedback() {
-    feedback.panel.classList.add('is-submitted');
-    feedback.thanks.textContent = 'Maybe next time!';
-    feedback.thanks.hidden = false;
+    closeFeedback();
 }
 
 // Boot

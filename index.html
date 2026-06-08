@@ -178,7 +178,9 @@
                 </div>
                 <p class="reveal-result__credit">Generated with Google Gemini. Faces are AI-composited — actual identities may vary slightly.</p>
 
-                <section class="feedback" id="feedbackPanel" aria-labelledby="feedbackTitle">
+                <div class="feedback-overlay" id="feedbackOverlay" role="dialog" aria-modal="true" aria-labelledby="feedbackTitle" hidden>
+                <section class="feedback" id="feedbackPanel">
+                    <button type="button" class="feedback__close" id="feedbackCloseBtn" aria-label="Close feedback">&times;</button>
                     <h2 class="feedback__title" id="feedbackTitle">How did we do?</h2>
 
                     <div class="feedback__question">
@@ -210,6 +212,7 @@
 
                     <p class="feedback__thanks" id="feedbackThanks" hidden>Thank you for your feedback! ✨</p>
                 </section>
+                </div>
             </div>
 
         </section>
