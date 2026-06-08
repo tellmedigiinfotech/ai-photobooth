@@ -66,6 +66,13 @@ module.exports = async function handler(req, res) {
       if (rating1 == null || rating2 == null) {
         return res.status(400).json({ error: "rating1 and rating2 must be integers 1-5" });
       }
+      // Optional thumbnail of the user's generated image. Capped at ~900 KB
+      // so the document stays comfortably under Firestore's 1 MB per-doc limit.
+      let imageDataUrl = null;
+      if (typeof body.imageDataUrl === "string" && /^data:image\/(jpe?g|png|webp);base64,/.test(body.imageDataUrl)) {
+        imageDataUrl = body.imageDataUrl.slice(0, 900000);
+      }
+
       const doc = {
         rating1,                                                    // "Did you like the image?"
         rating2,                                                    // "Would you share it on social media?"
@@ -73,6 +80,7 @@ module.exports = async function handler(req, res) {
         backgroundFilename: String(body.backgroundFilename || "").slice(0, 160) || null,
         gender:             body.gender === "male" || body.gender === "female" ? body.gender : null,
         anonId:             String(body.anonId || "").slice(0, 64) || null,
+        imageDataUrl,
         userAgent:          String(req.headers["user-agent"] || "").slice(0, 240),
         createdAt:          admin.firestore.FieldValue.serverTimestamp(),
       };
@@ -100,6 +108,7 @@ module.exports = async function handler(req, res) {
           backgroundFilename: x.backgroundFilename || null,
           gender: x.gender,
           anonId: x.anonId,
+          imageDataUrl: x.imageDataUrl || null,
           userAgent: x.userAgent,
           createdAt: x.createdAt && x.createdAt.toDate ? x.createdAt.toDate().toISOString() : null,
         };

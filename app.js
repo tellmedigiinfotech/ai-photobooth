@@ -368,6 +368,28 @@ async function compressImage(blob, quality = 0.9, maxWidth = 1600) {
     });
 }
 
+// Take a data URL (typically the final branded result), resample it to a
+// small thumbnail JPEG, and return a new data URL. Used to attach a copy
+// of the rated image to each feedback submission. Capped well under
+// Firestore's 1 MB per-document limit.
+function dataUrlToThumbnail(dataUrl, maxWidth = 600, quality = 0.75) {
+    return new Promise((resolve, reject) => {
+        if (!dataUrl) return resolve(null);
+        const img = new Image();
+        img.onload = () => {
+            const ratio = Math.min(1, maxWidth / img.naturalWidth);
+            const w = Math.round(img.naturalWidth * ratio);
+            const h = Math.round(img.naturalHeight * ratio);
+            const c = document.createElement('canvas');
+            c.width = w; c.height = h;
+            c.getContext('2d').drawImage(img, 0, 0, w, h);
+            resolve(c.toDataURL('image/jpeg', quality));
+        };
+        img.onerror = () => reject(new Error('Image load failed'));
+        img.src = dataUrl;
+    });
+}
+
 // Composite the brand logo (top-right, circular badge with white ring) and
 // the bilingual tagline (bottom-center, dark translucent rounded plate)
 // onto the generated photo. Sizes are proportional to the image so the
@@ -777,6 +799,15 @@ async function submitFeedback() {
         const bgUrl = state.selectedPreset?.backgroundUrl || '';
         const backgroundFilename = bgUrl.split('/').pop() || null;
 
+        // Snapshot the user's actual generated image as a small thumbnail.
+        // Failure here is non-fatal — feedback still goes through.
+        let imageDataUrl = null;
+        try {
+            imageDataUrl = await dataUrlToThumbnail(el.generatedImage.src, 600, 0.75);
+        } catch (thumbErr) {
+            console.warn('Thumbnail failed:', thumbErr);
+        }
+
         const payload = {
             rating1:    feedback.ratings.rating1,
             rating2:    feedback.ratings.rating2,
@@ -784,6 +815,7 @@ async function submitFeedback() {
             backgroundFilename,
             gender:     state.selectedGender || null,
             anonId:     getAnonId(),
+            imageDataUrl,
         };
         const res = await fetch('/api/feedback', {
             method: 'POST',
