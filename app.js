@@ -623,6 +623,7 @@ function resetAll() {
     el.genderRadios.forEach(r => { r.checked = false; });
     el.selectedDestName.textContent = 'Nothing yet';
     el.generateBtn.disabled = true;
+    resetFeedback();
     goToStep(1);
 }
 
@@ -662,6 +663,114 @@ function wireEvents() {
     el.downloadBtn.addEventListener('click', download);
     el.shareWhatsAppBtn.addEventListener('click', shareWhatsApp);
     el.printBtn.addEventListener('click', () => window.print());
+
+    wireFeedback();
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  Feedback (post-generation star rating, persisted to Firestore)
+// ═══════════════════════════════════════════════════════════════
+
+const feedback = {
+    panel: null,
+    submitBtn: null,
+    skipBtn: null,
+    thanks: null,
+    ratings: { rating1: 0, rating2: 0 },
+};
+
+// Stable anonymous user id so admin can spot repeat submitters without
+// us collecting any personal data.
+function getAnonId() {
+    try {
+        const k = 'ai-photobooth-anon-id';
+        let id = localStorage.getItem(k);
+        if (!id) {
+            id = (window.crypto && crypto.randomUUID)
+                ? crypto.randomUUID()
+                : 'anon-' + Date.now() + '-' + Math.random().toString(36).slice(2, 10);
+            localStorage.setItem(k, id);
+        }
+        return id;
+    } catch (_) { return null; }
+}
+
+function wireFeedback() {
+    feedback.panel     = $('feedbackPanel');
+    feedback.submitBtn = $('submitFeedbackBtn');
+    feedback.skipBtn   = $('skipFeedbackBtn');
+    feedback.thanks    = $('feedbackThanks');
+    if (!feedback.panel) return;
+
+    feedback.panel.querySelectorAll('.rating').forEach(group => {
+        const key = group.dataset.rating;
+        group.querySelectorAll('.rating__star').forEach(star => {
+            star.addEventListener('click', () => {
+                const value = Number(star.dataset.value);
+                feedback.ratings[key] = value;
+                group.dataset.value = String(value);
+                updateFeedbackSubmitState();
+            });
+        });
+    });
+
+    feedback.submitBtn.addEventListener('click', submitFeedback);
+    feedback.skipBtn.addEventListener('click', skipFeedback);
+}
+
+function updateFeedbackSubmitState() {
+    feedback.submitBtn.disabled = !(feedback.ratings.rating1 >= 1 && feedback.ratings.rating2 >= 1);
+}
+
+function resetFeedback() {
+    if (!feedback.panel) return;
+    feedback.ratings.rating1 = 0;
+    feedback.ratings.rating2 = 0;
+    feedback.panel.classList.remove('is-submitted');
+    feedback.panel.querySelectorAll('.rating').forEach(g => g.removeAttribute('data-value'));
+    if (feedback.thanks) {
+        feedback.thanks.hidden = true;
+        feedback.thanks.textContent = 'Thank you for your feedback! ✨';
+    }
+    feedback.submitBtn.disabled = true;
+    feedback.submitBtn.textContent = 'Send feedback';
+}
+
+async function submitFeedback() {
+    if (feedback.submitBtn.disabled) return;
+    feedback.submitBtn.disabled = true;
+    feedback.submitBtn.textContent = 'Sending…';
+    try {
+        const payload = {
+            rating1:    feedback.ratings.rating1,
+            rating2:    feedback.ratings.rating2,
+            presetName: state.selectedPreset?.name || null,
+            gender:     state.selectedGender || null,
+            anonId:     getAnonId(),
+        };
+        const res = await fetch('/api/feedback', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+            throw new Error(data.details || data.error || 'Could not send feedback');
+        }
+        feedback.panel.classList.add('is-submitted');
+        feedback.thanks.hidden = false;
+    } catch (err) {
+        console.error('Feedback failed:', err);
+        toast(err.message || 'Could not send feedback', 'error', 4000);
+        feedback.submitBtn.disabled = false;
+        feedback.submitBtn.textContent = 'Send feedback';
+    }
+}
+
+function skipFeedback() {
+    feedback.panel.classList.add('is-submitted');
+    feedback.thanks.textContent = 'Maybe next time!';
+    feedback.thanks.hidden = false;
 }
 
 // Boot

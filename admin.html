@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="robots" content="noindex, nofollow" />
+<title>Feedback Admin — AI Photobooth</title>
+<style>
+    :root {
+        --bg:        #faf6ee;
+        --surface:   #ffffff;
+        --border:    #e6dcca;
+        --ink:       #26201b;
+        --muted:     #7a6e5f;
+        --accent:    #a63e1e;
+        --accent-hot:#8c3116;
+        --gold:      #b88740;
+        --error:     #a6301f;
+    }
+    * { box-sizing: border-box; }
+    body {
+        margin: 0;
+        font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+        color: var(--ink);
+        background: var(--bg);
+        line-height: 1.5;
+    }
+    header {
+        background: var(--surface);
+        border-bottom: 1px solid var(--border);
+        padding: 16px 24px;
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        flex-wrap: wrap;
+    }
+    h1 { margin: 0; font-size: 1.25rem; font-weight: 600; }
+    main { max-width: 1200px; margin: 0 auto; padding: 24px; }
+
+    .gate {
+        max-width: 380px;
+        margin: 80px auto;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 28px;
+        text-align: center;
+    }
+    .gate h2 { margin: 0 0 16px; font-size: 1.1rem; }
+    input[type=password], input[type=text] {
+        width: 100%;
+        padding: 10px 12px;
+        font: inherit;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: #fff;
+    }
+    button {
+        background: var(--accent);
+        color: #fff;
+        border: 0;
+        padding: 10px 18px;
+        font: inherit;
+        font-weight: 600;
+        border-radius: 6px;
+        cursor: pointer;
+    }
+    button:hover { background: var(--accent-hot); }
+    button.ghost { background: transparent; color: var(--accent); border: 1px solid var(--border); }
+    .row { display: flex; gap: 8px; margin-top: 12px; }
+    .row > input { flex: 1; }
+
+    .summary {
+        margin-bottom: 16px;
+        color: var(--muted);
+        font-size: 0.95rem;
+    }
+    .summary strong { color: var(--ink); }
+
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        overflow: hidden;
+    }
+    th, td {
+        padding: 10px 12px;
+        text-align: left;
+        border-bottom: 1px solid var(--border);
+        font-size: 0.92rem;
+        vertical-align: top;
+    }
+    th { background: #f4ecdd; font-weight: 600; }
+    tr:last-child td { border-bottom: 0; }
+    .stars { color: var(--gold); letter-spacing: 1px; white-space: nowrap; }
+    .stars .off { color: #d6cab2; }
+    .muted { color: var(--muted); font-size: 0.85rem; }
+    .err {
+        background: #fde6e2;
+        border: 1px solid #f0b7ad;
+        color: var(--error);
+        padding: 12px 14px;
+        border-radius: 6px;
+        margin-bottom: 16px;
+    }
+    .empty {
+        text-align: center;
+        padding: 40px;
+        color: var(--muted);
+    }
+</style>
+</head>
+<body>
+
+<header id="topbar" hidden>
+    <h1>Feedback Admin</h1>
+    <span class="muted" id="countLabel"></span>
+    <div style="margin-left:auto; display:flex; gap:8px;">
+        <button class="ghost" id="refreshBtn">Refresh</button>
+        <button class="ghost" id="logoutBtn">Log out</button>
+    </div>
+</header>
+
+<main>
+    <div class="gate" id="gate">
+        <h2>Enter admin password</h2>
+        <input type="password" id="pwInput" autocomplete="current-password" placeholder="Password" autofocus />
+        <div class="row">
+            <button id="loginBtn" style="flex:1">Sign in</button>
+        </div>
+        <p id="gateErr" class="err" hidden></p>
+        <p class="muted" style="margin-top:16px; font-size:0.85rem;">
+            Password is the <code>ADMIN_PASSWORD</code> env var set in the Vercel project.
+        </p>
+    </div>
+
+    <div id="board" hidden>
+        <p class="summary" id="summary"></p>
+        <p id="loadErr" class="err" hidden></p>
+        <div id="tableWrap"></div>
+    </div>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const PASS_KEY = 'photobooth-admin-pw';
+
+function stars(n) {
+    n = Math.max(0, Math.min(5, Number(n) || 0));
+    return '<span class="stars">' + '★'.repeat(n) + '<span class="off">' + '★'.repeat(5 - n) + '</span></span>';
+}
+function fmtDate(iso) {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    return d.toLocaleString();
+}
+function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+async function loadFeedback(pw) {
+    $('loadErr').hidden = true;
+    const res = await fetch('/api/feedback', { headers: { 'x-admin-password': pw } });
+    if (res.status === 401) throw new Error('Wrong password.');
+    if (!res.ok) {
+        let detail = '';
+        try { const j = await res.json(); detail = j.details || j.error || ''; } catch (_) {}
+        throw new Error(detail || ('Server returned HTTP ' + res.status));
+    }
+    return res.json();
+}
+
+function render(items) {
+    $('countLabel').textContent = `${items.length} submission${items.length === 1 ? '' : 's'}`;
+    $('summary').innerHTML = '';
+    if (items.length === 0) {
+        $('tableWrap').innerHTML = '<div class="empty">No feedback yet.</div>';
+        return;
+    }
+    // Quick averages
+    const avg = (k) => {
+        const vals = items.map(x => x[k]).filter(v => typeof v === 'number');
+        return vals.length ? (vals.reduce((a,b) => a + b, 0) / vals.length).toFixed(2) : '—';
+    };
+    $('summary').innerHTML =
+        `Average — image: <strong>${avg('rating1')}</strong> · share: <strong>${avg('rating2')}</strong>`;
+
+    const rows = items.map(x => `
+        <tr>
+            <td class="muted">${esc(fmtDate(x.createdAt))}</td>
+            <td>${esc(x.presetName || '—')}</td>
+            <td>${esc(x.gender || '—')}</td>
+            <td>${stars(x.rating1)}</td>
+            <td>${stars(x.rating2)}</td>
+            <td class="muted" title="${esc(x.anonId || '')}">${esc((x.anonId || '').slice(0, 8))}</td>
+        </tr>
+    `).join('');
+    $('tableWrap').innerHTML = `
+        <table>
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Destination</th>
+                    <th>Gender</th>
+                    <th>Liked image</th>
+                    <th>Would share</th>
+                    <th>User</th>
+                </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+        </table>`;
+}
+
+async function showBoard(pw) {
+    try {
+        const data = await loadFeedback(pw);
+        sessionStorage.setItem(PASS_KEY, pw);
+        $('gate').hidden = true;
+        $('board').hidden = false;
+        $('topbar').hidden = false;
+        render(data.items || []);
+    } catch (err) {
+        if (sessionStorage.getItem(PASS_KEY) === pw) sessionStorage.removeItem(PASS_KEY);
+        $('gate').hidden = false;
+        $('board').hidden = true;
+        $('topbar').hidden = true;
+        $('gateErr').textContent = err.message;
+        $('gateErr').hidden = false;
+    }
+}
+
+$('loginBtn').addEventListener('click', () => {
+    const pw = $('pwInput').value.trim();
+    if (!pw) return;
+    showBoard(pw);
+});
+$('pwInput').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') $('loginBtn').click();
+});
+$('refreshBtn').addEventListener('click', async () => {
+    const pw = sessionStorage.getItem(PASS_KEY);
+    if (!pw) return;
+    try {
+        const data = await loadFeedback(pw);
+        render(data.items || []);
+    } catch (err) {
+        $('loadErr').textContent = err.message;
+        $('loadErr').hidden = false;
+    }
+});
+$('logoutBtn').addEventListener('click', () => {
+    sessionStorage.removeItem(PASS_KEY);
+    location.reload();
+});
+
+// Restore session
+const saved = sessionStorage.getItem(PASS_KEY);
+if (saved) showBoard(saved);
+</script>
+
+</body>
+</html>
