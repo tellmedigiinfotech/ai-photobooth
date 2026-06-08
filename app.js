@@ -368,28 +368,6 @@ async function compressImage(blob, quality = 0.9, maxWidth = 1600) {
     });
 }
 
-// Take a data: URL (e.g. the final branded image), resample it to a small
-// thumbnail JPEG and return a new data URL. Used so we can attach a copy of
-// the rated image to the feedback payload without exceeding Firestore's
-// 1 MB per-document limit.
-function dataUrlToThumbnail(dataUrl, maxWidth = 600, quality = 0.75) {
-    return new Promise((resolve, reject) => {
-        if (!dataUrl) return resolve(null);
-        const img = new Image();
-        img.onload = () => {
-            const ratio = Math.min(1, maxWidth / img.naturalWidth);
-            const w = Math.round(img.naturalWidth * ratio);
-            const h = Math.round(img.naturalHeight * ratio);
-            const c = document.createElement('canvas');
-            c.width = w; c.height = h;
-            c.getContext('2d').drawImage(img, 0, 0, w, h);
-            resolve(c.toDataURL('image/jpeg', quality));
-        };
-        img.onerror = () => reject(new Error('Image load failed'));
-        img.src = dataUrl;
-    });
-}
-
 // Composite the brand logo (top-right, circular badge with white ring) and
 // the bilingual tagline (bottom-center, dark translucent rounded plate)
 // onto the generated photo. Sizes are proportional to the image so the
@@ -763,20 +741,18 @@ async function submitFeedback() {
     feedback.submitBtn.disabled = true;
     feedback.submitBtn.textContent = 'Sending…';
     try {
-        let imageDataUrl = null;
-        try {
-            imageDataUrl = await dataUrlToThumbnail(el.generatedImage.src, 600, 0.75);
-        } catch (thumbErr) {
-            console.warn('Thumbnail failed, sending feedback without image:', thumbErr);
-        }
+        // Extract just the filename from the preset's background URL (e.g.
+        // "assets/backgrounds/bhimbetka-rock-shelter.jpg" → "bhimbetka-rock-shelter.jpg").
+        const bgUrl = state.selectedPreset?.backgroundUrl || '';
+        const backgroundFilename = bgUrl.split('/').pop() || null;
 
         const payload = {
             rating1:    feedback.ratings.rating1,
             rating2:    feedback.ratings.rating2,
             presetName: state.selectedPreset?.name || null,
+            backgroundFilename,
             gender:     state.selectedGender || null,
             anonId:     getAnonId(),
-            imageDataUrl,
         };
         const res = await fetch('/api/feedback', {
             method: 'POST',
