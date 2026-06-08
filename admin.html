@@ -142,6 +142,7 @@
     <h1>Feedback Admin</h1>
     <span class="muted" id="countLabel"></span>
     <div style="margin-left:auto; display:flex; gap:8px;">
+        <button class="ghost" id="downloadCsvBtn" title="Download all feedback as a CSV file (opens in Excel)">Download Excel</button>
         <button class="ghost" id="refreshBtn">Refresh</button>
         <button class="ghost" id="logoutBtn">Log out</button>
     </div>
@@ -178,6 +179,7 @@
 <script>
 const $ = (id) => document.getElementById(id);
 const PASS_KEY = 'photobooth-admin-pw';
+let currentItems = [];
 
 function stars(n) {
     n = Math.max(0, Math.min(5, Number(n) || 0));
@@ -205,7 +207,9 @@ async function loadFeedback(pw) {
 }
 
 function render(items) {
+    currentItems = items;
     $('countLabel').textContent = `${items.length} submission${items.length === 1 ? '' : 's'}`;
+    $('downloadCsvBtn').disabled = items.length === 0;
     $('summary').innerHTML = '';
     if (items.length === 0) {
         $('tableWrap').innerHTML = '<div class="empty">No feedback yet.</div>';
@@ -287,6 +291,42 @@ $('pwToggle').addEventListener('click', () => {
 $('pwInput').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') $('loginBtn').click();
 });
+// CSV: RFC 4180-style escaping — wrap a field in double quotes if it
+// contains a comma, double-quote, newline, or carriage return; double up
+// any inner double-quotes. Prepend a UTF-8 BOM so Excel reads non-ASCII
+// characters (em-dash, accented names, etc.) without garbling.
+function csvCell(v) {
+    const s = v == null ? '' : String(v);
+    return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+
+function downloadCsv() {
+    if (!currentItems.length) return;
+    const headers = ['Date', 'Destination', 'Background file', 'Gender', 'Liked image (1-5)', 'Would share (1-5)', 'User ID'];
+    const rows = currentItems.map(x => [
+        fmtDate(x.createdAt),
+        x.presetName || '',
+        x.backgroundFilename || '',
+        x.gender || '',
+        x.rating1 ?? '',
+        x.rating2 ?? '',
+        x.anonId || '',
+    ].map(csvCell).join(','));
+    const csv = '﻿' + [headers.map(csvCell).join(','), ...rows].join('\r\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const today = new Date().toISOString().slice(0, 10);
+    a.href = url;
+    a.download = `ai-photobooth-feedback-${today}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+}
+
+$('downloadCsvBtn').addEventListener('click', downloadCsv);
+
 $('refreshBtn').addEventListener('click', async () => {
     const pw = sessionStorage.getItem(PASS_KEY);
     if (!pw) return;
