@@ -681,7 +681,17 @@ function wireEvents() {
 
     el.generateBtn.addEventListener('click', generate);
 
-    el.newPhotoBtn.addEventListener('click', resetAll);
+    // "Start over" — if the user hasn't given feedback yet in this session,
+    // surface the popup first; resetAll then runs after they close it
+    // (handled inside closeFeedback). Otherwise just reset right away.
+    el.newPhotoBtn.addEventListener('click', () => {
+        if (feedback.submittedThisSession || !feedback.overlay) {
+            resetAll();
+            return;
+        }
+        feedback.resetAfterClose = true;
+        openFeedback();
+    });
     // The feedback popup is no longer auto-opened. Instead it surfaces
     // whenever the user takes a post-generation action (download, share,
     // print) — i.e. they've actually done something with the image.
@@ -705,6 +715,9 @@ const feedback = {
     // Once the user has submitted feedback in this page session we never
     // auto-reopen the popup again — they're done, no point pestering them.
     submittedThisSession: false,
+    // When the user clicked "Start over" we open the popup first and want
+    // to run resetAll only AFTER they close/submit it.
+    resetAfterClose: false,
 };
 
 // Stable anonymous user id so admin can spot repeat submitters without
@@ -768,6 +781,12 @@ function closeFeedback() {
     if (!feedback.overlay) return;
     feedback.overlay.hidden = true;
     resetFeedback();
+    // If "Start over" was the action that opened the popup, run the
+    // actual reset now that the user has dealt with the feedback.
+    if (feedback.resetAfterClose) {
+        feedback.resetAfterClose = false;
+        resetAll();
+    }
 }
 
 function updateFeedbackSubmitState() {
