@@ -577,10 +577,6 @@ async function generate() {
 
         if (genData.note) toast(genData.note, 'error', 6000);
         else toast('Your photo is ready!', 'success');
-
-        // Give the user a moment to enjoy the result, then surface the
-        // feedback prompt as a modal popup.
-        setTimeout(openFeedback, 3000);
     } catch (err) {
         console.error(err);
         toast(err.message || 'Generation failed. Please try again.', 'error', 6000);
@@ -686,9 +682,12 @@ function wireEvents() {
     el.generateBtn.addEventListener('click', generate);
 
     el.newPhotoBtn.addEventListener('click', resetAll);
-    el.downloadBtn.addEventListener('click', download);
-    el.shareWhatsAppBtn.addEventListener('click', shareWhatsApp);
-    el.printBtn.addEventListener('click', () => window.print());
+    // The feedback popup is no longer auto-opened. Instead it surfaces
+    // whenever the user takes a post-generation action (download, share,
+    // print) — i.e. they've actually done something with the image.
+    el.downloadBtn.addEventListener('click', () => { download(); openFeedback(); });
+    el.shareWhatsAppBtn.addEventListener('click', () => { shareWhatsApp(); openFeedback(); });
+    el.printBtn.addEventListener('click', () => { window.print(); openFeedback(); });
 
     wireFeedback();
 }
