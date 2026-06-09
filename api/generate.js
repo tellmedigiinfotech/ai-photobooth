@@ -1,4 +1,5 @@
 const { GoogleGenAI } = require("@google/genai");
+const { admin, getDb } = require("../lib/firebase");
 
 // The client sends a JSON body: { userImage: <data-URL>, presetId, gender }.
 // Vercel's Node runtime parses an application/json body into req.body for us;
@@ -195,6 +196,18 @@ module.exports = async function handler(req, res) {
         if (!imagePart) {
             const textPart = parts.find(p => p.text);
             throw new Error(`No image in response. ${textPart?.text || ""}`.trim());
+        }
+
+        // Best-effort: tick the usage counter for this background. A failure
+        // here must not block returning the generated image to the user.
+        try {
+            await getDb().collection("usage").doc(preset.bg).set({
+                filename:   preset.bg,
+                count:      admin.firestore.FieldValue.increment(1),
+                lastUsedAt: admin.firestore.FieldValue.serverTimestamp(),
+            }, { merge: true });
+        } catch (counterErr) {
+            console.warn("Usage counter failed:", counterErr.message);
         }
 
         return res.json({

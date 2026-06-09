@@ -9,25 +9,8 @@
 //   FIREBASE_SERVICE_ACCOUNT — entire service account JSON (one line)
 //   ADMIN_PASSWORD           — password the admin types on /admin.html
 
-const admin = require("firebase-admin");
 const crypto = require("crypto");
-
-// Cache the initialised Firebase app across serverless invocations on the
-// same warm container so we don't reinitialise on every request.
-function getDb() {
-  if (admin.apps.length === 0) {
-    const raw = process.env.FIREBASE_SERVICE_ACCOUNT;
-    if (!raw) throw new Error("FIREBASE_SERVICE_ACCOUNT env var is not set");
-    let creds;
-    try {
-      creds = JSON.parse(raw);
-    } catch (e) {
-      throw new Error("FIREBASE_SERVICE_ACCOUNT is not valid JSON: " + e.message);
-    }
-    admin.initializeApp({ credential: admin.credential.cert(creds) });
-  }
-  return admin.firestore();
-}
+const { admin, getDb } = require("../lib/firebase");
 
 // Timing-safe string compare so we don't leak the admin password byte-by-byte.
 function safeEqual(a, b) {

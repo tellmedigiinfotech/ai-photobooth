@@ -1179,3 +1179,30 @@ p { margin: 0; color: var(--c-ink-soft); }
     background: var(--c-bg-alt);
     color: var(--c-ink);
 }
+
+/* ── Destination card: usage count badge ───────────────────────── */
+.destination-card__uses {
+    position: absolute;
+    top: var(--s-2);
+    left: var(--s-2);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 9px 4px 7px;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.62);
+    color: #fff;
+    font-size: 0.78rem;
+    font-weight: 600;
+    line-height: 1;
+    letter-spacing: 0.01em;
+    backdrop-filter: blur(4px);
+    z-index: 2;
+    pointer-events: none;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+}
+.destination-card__uses svg {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+}
