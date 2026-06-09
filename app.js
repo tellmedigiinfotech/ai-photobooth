@@ -310,12 +310,11 @@ function renderDestinations() {
         card.dataset.presetId = p.id;
         const filename = (p.backgroundUrl || '').split('/').pop();
         const count = state.usageCounts[filename] || 0;
-        const badgeHtml = count > 0
-            ? `<div class="destination-card__uses" aria-label="Used ${count} times">
-                   <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5Zm0 12.5a5 5 0 1 1 0-10 5 5 0 0 1 0 10Zm0-8a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z"/></svg>
-                   <span>${count}</span>
-               </div>`
-            : '';
+        const badgeHtml = `
+            <div class="destination-card__uses" aria-label="Used ${count} times">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5Zm0 12.5a5 5 0 1 1 0-10 5 5 0 0 1 0 10Zm0-8a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z"/></svg>
+                <span>${count}</span>
+            </div>`;
         card.innerHTML = `
             <div class="destination-card__media">
                 <img src="${p.backgroundUrl}" alt="" loading="lazy" />
