@@ -10,7 +10,9 @@
 const crypto = require("crypto");
 
 const COOKIE_NAME = "site_auth";
-const COOKIE_MAX_AGE_SECONDS = 90 * 24 * 60 * 60;          // 90 days
+// Effectively permanent — modern browsers cap cookies at ~400 days, so any
+// device that visits the site at least once a year keeps continuous access.
+const COOKIE_MAX_AGE_SECONDS = 10 * 365 * 24 * 60 * 60;    // 10 years
 
 function safeEqual(a, b) {
     const A = Buffer.from(String(a || ""));
