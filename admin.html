@@ -134,6 +134,57 @@
         border-radius: 4px;
         color: var(--ink);
     }
+    .tabs {
+        display: flex;
+        gap: 4px;
+        border-bottom: 1px solid var(--border);
+        margin-bottom: 20px;
+    }
+    .tab {
+        padding: 10px 18px;
+        background: transparent;
+        border: 0;
+        border-bottom: 2px solid transparent;
+        color: var(--muted);
+        cursor: pointer;
+        font: inherit;
+        font-weight: 500;
+        margin-bottom: -1px;
+        border-radius: 0;
+    }
+    .tab:hover { color: var(--ink); background: transparent; }
+    .tab.is-active {
+        color: var(--accent);
+        border-bottom-color: var(--accent);
+        font-weight: 600;
+    }
+    .tab-pane[hidden] { display: none; }
+    .stats-cards {
+        display: flex;
+        gap: 16px;
+        margin-bottom: 24px;
+        flex-wrap: wrap;
+    }
+    .stat-card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 20px 24px;
+        min-width: 220px;
+        flex: 1;
+        max-width: 320px;
+    }
+    .stat-card__value {
+        font-size: 2.4rem;
+        font-weight: 700;
+        color: var(--accent);
+        line-height: 1;
+        margin-bottom: 6px;
+    }
+    .stat-card__label {
+        color: var(--muted);
+        font-size: 0.92rem;
+    }
     .thumb {
         width: 60px;
         height: 80px;
@@ -209,9 +260,31 @@
     </div>
 
     <div id="board" hidden>
-        <p class="summary" id="summary"></p>
-        <p id="loadErr" class="err" hidden></p>
-        <div id="tableWrap"></div>
+        <nav class="tabs" role="tablist">
+            <button class="tab is-active" id="tabBtnFeedback" data-tab="feedback" role="tab" aria-selected="true">Feedback</button>
+            <button class="tab" id="tabBtnStats" data-tab="stats" role="tab" aria-selected="false">Stats / MIS</button>
+        </nav>
+
+        <section class="tab-pane is-active" id="tab-feedback" role="tabpanel" aria-labelledby="tabBtnFeedback">
+            <p class="summary" id="summary"></p>
+            <p id="loadErr" class="err" hidden></p>
+            <div id="tableWrap"></div>
+        </section>
+
+        <section class="tab-pane" id="tab-stats" role="tabpanel" aria-labelledby="tabBtnStats" hidden>
+            <div class="stats-cards">
+                <div class="stat-card">
+                    <div class="stat-card__value" id="statsTotalPhotos">—</div>
+                    <div class="stat-card__label">Total photos generated</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-card__value" id="statsBgCount">—</div>
+                    <div class="stat-card__label">Backgrounds used at least once</div>
+                </div>
+            </div>
+            <p id="statsLoadErr" class="err" hidden></p>
+            <div id="statsTableWrap"></div>
+        </section>
     </div>
 </main>
 
@@ -223,6 +296,8 @@
 const $ = (id) => document.getElementById(id);
 const PASS_KEY = 'photobooth-admin-pw';
 let currentItems = [];
+let currentStats = null;       // { total, backgrounds }
+let activeTab = 'feedback';    // 'feedback' | 'stats'
 
 function stars(n) {
     n = Math.max(0, Math.min(5, Number(n) || 0));
@@ -383,17 +458,129 @@ function downloadCsv() {
     URL.revokeObjectURL(url);
 }
 
-$('downloadCsvBtn').addEventListener('click', downloadCsv);
+// ── Stats / MIS tab ────────────────────────────────────────────────
+
+async function loadStats(pw) {
+    $('statsLoadErr').hidden = true;
+    const res = await fetch('/api/stats', { headers: { 'x-admin-password': pw } });
+    if (res.status === 401) throw new Error('Wrong password.');
+    if (!res.ok) {
+        let detail = '';
+        try { const j = await res.json(); detail = j.details || j.error || ''; } catch (_) {}
+        throw new Error(detail || ('Server returned HTTP ' + res.status));
+    }
+    return res.json();
+}
+
+function renderStats(data) {
+    currentStats = data;
+    $('statsTotalPhotos').textContent = Number(data.total || 0).toLocaleString();
+    $('statsBgCount').textContent = (data.backgrounds || []).length.toLocaleString();
+    if (!data.backgrounds || data.backgrounds.length === 0) {
+        $('statsTableWrap').innerHTML = '<div class="empty">No photo generations yet.</div>';
+        return;
+    }
+    const rows = data.backgrounds.map((b, i) => `
+        <tr>
+            <td class="muted">${i + 1}</td>
+            <td><code>${esc(b.filename)}</code></td>
+            <td><strong>${Number(b.count || 0).toLocaleString()}</strong></td>
+            <td class="muted">${esc(fmtDate(b.lastUsedAt))}</td>
+        </tr>
+    `).join('');
+    $('statsTableWrap').innerHTML = `
+        <table>
+            <thead>
+                <tr>
+                    <th style="width:40px">#</th>
+                    <th>Background file</th>
+                    <th>Photos generated</th>
+                    <th>Last used</th>
+                </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+        </table>`;
+}
+
+function downloadStatsCsv() {
+    if (!currentStats) return;
+    const headers = ['Rank', 'Background file', 'Photos generated', 'Last used'];
+    const rows = (currentStats.backgrounds || []).map((b, i) => [
+        i + 1,
+        b.filename || '',
+        b.count || 0,
+        fmtDate(b.lastUsedAt),
+    ].map(csvCell).join(','));
+    const totalRow = [csvCell(''), csvCell('TOTAL'), csvCell(currentStats.total || 0), csvCell('')].join(',');
+    const csv = '﻿' + [
+        headers.map(csvCell).join(','),
+        ...rows,
+        '',
+        totalRow,
+    ].join('\r\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const today = new Date().toISOString().slice(0, 10);
+    a.href = url;
+    a.download = `ai-photobooth-stats-${today}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+}
+
+// ── Tab navigation ─────────────────────────────────────────────────
+
+async function switchTab(name) {
+    activeTab = name;
+    document.querySelectorAll('.tab').forEach((t) => {
+        const isThis = t.dataset.tab === name;
+        t.classList.toggle('is-active', isThis);
+        t.setAttribute('aria-selected', String(isThis));
+    });
+    document.querySelectorAll('.tab-pane').forEach((p) => {
+        p.hidden = (p.id !== 'tab-' + name);
+    });
+
+    if (name === 'feedback') {
+        $('countLabel').textContent = `${currentItems.length} submission${currentItems.length === 1 ? '' : 's'}`;
+        $('downloadCsvBtn').disabled = currentItems.length === 0;
+        $('downloadCsvBtn').title = 'Download all feedback as a CSV file (opens in Excel)';
+    } else if (name === 'stats') {
+        // Lazy-load on first activation
+        if (!currentStats) {
+            const pw = sessionStorage.getItem(PASS_KEY);
+            if (pw) {
+                try { renderStats(await loadStats(pw)); }
+                catch (err) { $('statsLoadErr').textContent = err.message; $('statsLoadErr').hidden = false; }
+            }
+        }
+        const total = currentStats ? currentStats.total : 0;
+        $('countLabel').textContent = `${Number(total).toLocaleString()} photo${total === 1 ? '' : 's'} generated`;
+        $('downloadCsvBtn').disabled = !currentStats || (currentStats.backgrounds || []).length === 0;
+        $('downloadCsvBtn').title = 'Download per-background generation stats as a CSV file (opens in Excel)';
+    }
+}
+
+document.querySelectorAll('.tab').forEach((t) => {
+    t.addEventListener('click', () => switchTab(t.dataset.tab));
+});
+
+$('downloadCsvBtn').addEventListener('click', () => {
+    if (activeTab === 'stats') downloadStatsCsv();
+    else downloadCsv();
+});
 
 $('refreshBtn').addEventListener('click', async () => {
     const pw = sessionStorage.getItem(PASS_KEY);
     if (!pw) return;
-    try {
-        const data = await loadFeedback(pw);
-        render(data.items || []);
-    } catch (err) {
-        $('loadErr').textContent = err.message;
-        $('loadErr').hidden = false;
+    if (activeTab === 'feedback') {
+        try { render((await loadFeedback(pw)).items || []); }
+        catch (err) { $('loadErr').textContent = err.message; $('loadErr').hidden = false; }
+    } else {
+        try { renderStats(await loadStats(pw)); }
+        catch (err) { $('statsLoadErr').textContent = err.message; $('statsLoadErr').hidden = false; }
     }
 });
 $('logoutBtn').addEventListener('click', () => {
