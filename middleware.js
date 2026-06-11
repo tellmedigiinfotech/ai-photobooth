@@ -24,12 +24,21 @@ const PUBLIC_PATHS = new Set([
     '/api/usage',         // public popularity counts (no PII)
 ]);
 
+// Path prefixes that bypass the gate. /assets/backgrounds/ must be reachable
+// without a cookie because /api/generate fetches the background image
+// server-to-server (no cookie) and passes it to Gemini — gating it broke
+// generation with "Unsupported MIME type: text/html".
+const PUBLIC_PREFIXES = [
+    '/assets/backgrounds/',
+];
+
 export default async function middleware(request) {
     const url = new URL(request.url);
     const path = url.pathname;
 
     // Always allow public paths
     if (PUBLIC_PATHS.has(path)) return;
+    if (PUBLIC_PREFIXES.some((p) => path.startsWith(p))) return;
 
     const cookie = request.headers.get('cookie') || '';
     const m = /(?:^|;\s*)site_auth=([^;]+)/.exec(cookie);
