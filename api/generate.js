@@ -1,36 +1,66 @@
-const { GoogleGenAI } = require("@google/genai");
-const multer = require("multer");
-const { Readable } = require("stream");
+const OpenAI = require("openai");
+const { toFile } = require("openai");
+const Busboy = require("busboy");
 
-const upload = multer({
-    storage: multer.memoryStorage(),
-    limits: { fileSize: 30 * 1024 * 1024 },
-});
+const MAX_FILE_BYTES = 30 * 1024 * 1024;
 
-// Vercel's Node.js runtime pre-buffers the multipart body into req.body as
-// a Buffer. Multer expects a stream, so when the body is already drained
-// we reconstruct a Readable mimicking IncomingMessage and hand that to
-// multer instead. Without this, multer throws "Unexpected end of form".
-function runMulter(req, res) {
-    return new Promise((resolve, reject) => {
-        let streamReq = req;
-        if (Buffer.isBuffer(req.body)) {
-            const rebuilt = new Readable({ read() {} });
-            rebuilt.push(req.body);
-            rebuilt.push(null);
-            Object.assign(rebuilt, {
+// Robust multipart parser for Vercel's Node runtime.
+//
+// Vercel sometimes pre-buffers req.body into a Buffer (or even a string),
+// and sometimes leaves it as a stream — depending on runtime version,
+// region, and bodyParser config. Multer assumes a stream and throws
+// "Unexpected end of form" the moment it sees anything else. To make this
+// bulletproof we ALWAYS drain to a Buffer first, then hand it to busboy
+// (the underlying parser multer wraps) ourselves.
+async function readRequestBody(req) {
+    if (Buffer.isBuffer(req.body)) return req.body;
+    if (typeof req.body === "string") return Buffer.from(req.body);
+    const chunks = [];
+    for await (const chunk of req) {
+        chunks.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
+    }
+    return Buffer.concat(chunks);
+}
+
+function parseMultipart(req) {
+    return new Promise(async (resolve, reject) => {
+        try {
+            const bodyBuffer = await readRequestBody(req);
+            const bb = Busboy({
                 headers: req.headers,
-                method: req.method,
-                url: req.url,
+                limits: { fileSize: MAX_FILE_BYTES, files: 4, fields: 20 },
             });
-            streamReq = rebuilt;
+
+            const fields = {};
+            const files = {};
+            let fileTooLarge = false;
+
+            bb.on("field", (name, val) => { fields[name] = val; });
+
+            bb.on("file", (name, file, info) => {
+                const chunks = [];
+                file.on("data", c => chunks.push(c));
+                file.on("limit", () => { fileTooLarge = true; });
+                file.on("end", () => {
+                    files[name] = {
+                        fieldname: name,
+                        buffer: Buffer.concat(chunks),
+                        mimetype: info.mimeType,
+                        originalname: info.filename,
+                    };
+                });
+            });
+
+            bb.on("error", reject);
+            bb.on("close", () => {
+                if (fileTooLarge) return reject(new Error("File too large (max 30MB)"));
+                resolve({ fields, files });
+            });
+
+            bb.end(bodyBuffer);
+        } catch (err) {
+            reject(err);
         }
-        upload.any()(streamReq, res, (err) => {
-            if (err) return reject(err);
-            req.files = streamReq.files;
-            req.body = streamReq.body;
-            resolve();
-        });
     });
 }
 
@@ -65,22 +95,22 @@ const PRESETS = {
     6:  { bg: "Chattei River view (7).jpg",
           setting: "18th-century Maratha riverside chhatri on the Narmada at Maheshwar",
           male:   "ahilyabai-era maratha nobleman in a crisp white cotton dhoti and bandgala-style kurta with a bright red pheta (maratha turban) and a simple shawl over one shoulder",
-          female: "ahilyabai-era maharashtrian lady in a traditional burgundy nauvari saree (9-yard drape), a gold nath (curved nose ring), thushi (short gold choker), green glass bangles, a pearl necklace and a small red decorative bindi" },
+          female: "ahilyabai-era maharashtrian lady in a traditional burgundy nauvari saree (9-yard drape), a thushi (short gold choker), green glass bangles, a pearl necklace and a small decorative bindi" },
 
     9:  { bg: "Krishnabai holkar chhatri .jpg",
           setting: "18th-century Holkar royal chhatri at Maheshwar",
           male:   "holkar-era maratha sardar in a cream cotton dhoti-kurta with a red pheta turban and a shawl draped over one shoulder",
-          female: "holkar-era maharashtrian queen in a royal-blue nauvari saree with gold border, a gold nath, thushi, pearl necklace and ornate traditional jewellery, styled after queen ahilyabai holkar" },
+          female: "holkar-era maharashtrian queen in a royal-blue nauvari saree with gold border, a thushi, pearl necklace and ornate traditional jewellery, styled after queen ahilyabai holkar" },
 
     10: { bg: "Rajwada Indore.jpg",
           setting: "18th-century seven-storey Holkar palace in Indore",
           male:   "holkar-era maharaja in a cream brocade angarkha, churidar pyjama, a jewelled red pheta turban with a sarpech ornament, a kamarband and a pearl necklace",
-          female: "holkar-era maharani in a peacock-green paithani saree with a heavy gold zari border, a large gold nath, ornate thushi, a multi-strand pearl necklace, maang tikka and traditional regal jewellery" },
+          female: "holkar-era maharani in a peacock-green paithani saree with a heavy gold zari border, an ornate thushi, a multi-strand pearl necklace, maang tikka and traditional regal jewellery" },
 
     11: { bg: "RajWada 15.jpg",
           setting: "inner courtyard of the 18th-century Holkar palace in Indore",
           male:   "holkar-era maratha nobleman in a cream cotton dhoti-kurta with a red pheta turban and a simple shawl",
-          female: "holkar-era royal lady in a teal nauvari saree with a gold border, a gold nath, thushi, pearl necklace and traditional maharashtrian jewellery" },
+          female: "holkar-era royal lady in a teal nauvari saree with a gold border, a thushi, pearl necklace and traditional maharashtrian jewellery" },
 
     12: { bg: "kheoni wildlife sanctuary .jpg",
           setting: "central Indian teak and sal forest at Kheoni Wildlife Sanctuary",
@@ -92,52 +122,50 @@ const PRESETS = {
           male:   "modern wildlife safari explorer in a sand-beige short-sleeve shirt with a chest pocket, khaki cargo trousers, a wide-brim canvas safari hat and binoculars hanging around the neck",
           female: "modern wildlife safari explorer in a sand-beige short-sleeve shirt with a chest pocket, khaki cargo trousers, a wide-brim canvas safari hat and binoculars hanging around the neck" },
 
-    // 14-15  Goa beaches            → modern, modest, fully-covered beach attire
-    // 16     Salim Ali Bird Sanctuary → smart-casual birdwatching attire
-    // 17-19  Gulmarg, Kashmir       → very well-dressed formal suit / elegant dress
-    14: { bg: "Cabo de Rama Beach_DSC9670.jpg",
-          setting: "wide curving Goan beach at Cabo de Rama during a soft pink-and-orange sunset, with the calm Arabian Sea, golden sand, dark coastal rocks and tall coconut palms swaying along the shoreline",
-          male:   "easy-going beach-day visitor in a soft cream linen full-sleeve shirt with the sleeves loosely rolled up to the forearm, fully buttoned, comfortable beige cotton beach trousers, and a pair of simple rubber flip-flop beach slippers — modest, fully clothed, no shorts and no swimwear",
-          female: "easy-going beach-day visitor in an ankle-length flowy white-and-pastel-floral cotton maxi dress with three-quarter sleeves and a high modest neckline, a wide-brim natural straw sun hat, and a pair of simple rubber flip-flop beach slippers — modest, fully covered, ankle-length skirt, no swimwear, no exposed shoulders or midriff" },
+    // 5   Bhimbetka rock shelters    → prehistoric paleolithic attire, ~30,000 BCE
+    // 7   Sanchi Stupa               → modern cultural heritage explorer
+    // 8   Mandu Jahaz Mahal          → early-1900s Indian heritage traveller
+    // 14  Bandhavgarh Shesh Shaiya   → modern jungle / wildlife explorer
+    5:  { bg: "Bhimbetka rock shelter.jpg",
+          setting: "ancient Bhimbetka rock shelters in Madhya Pradesh during the prehistoric era around 30,000 BCE, beneath the dramatic overhanging sandstone outcrop, with a warm-toned untouched primeval landscape and no modern structures, paths or visitors anywhere in frame",
+          male:   "prehistoric paleolithic cave artist in a short rough animal-hide loincloth in earthy browns with ochre stains low on the hips, a fiber rope belt holding small pigment pouches and twig brushes, a simple bone-bead necklace, a bare torso streaked with red, white and ochre paints mimicking Bhimbetka cave art motifs, wild hair tied back with vine and feathers, paint-splattered hands",
+          female: "prehistoric paleolithic gatherer in a fringed grass skirt in earthy beige with leaf patterns ending at mid-calf, a rough bark-cloth shawl draped over one shoulder and tied at the waist with a fiber rope belt set with small shell beads, subtle red ochre body-paint streaks on the arms mimicking Bhimbetka cave art motifs, a simple feather-and-bone necklace, long hair loose with small wildflower accents — modest, fully covered" },
 
-    15: { bg: "Cola Beach_DSC9401.jpg",
-          setting: "secluded Goan cove at Cola Beach with shallow turquoise water lapping over weathered black-and-rust coastal rocks, a small strip of golden sand and a lush forested hillside rising behind",
-          male:   "easy-going beach-day visitor in a soft sky-blue linen full-sleeve shirt with the sleeves loosely rolled up, fully buttoned, light sand-coloured cotton beach trousers, and a pair of simple rubber flip-flop beach slippers — modest, fully clothed, no shorts and no swimwear",
-          female: "easy-going beach-day visitor in an ankle-length flowy mint-green cotton maxi dress with three-quarter sleeves and a high modest neckline, a light sheer cotton scarf draped over the shoulders, and a pair of simple rubber flip-flop beach slippers — modest, fully covered, ankle-length skirt, no swimwear, no exposed shoulders or midriff" },
+    7:  { bg: "Sanchi Stupa.jpg",
+          setting: "the UNESCO World Heritage Site of Sanchi Stupa in Madhya Pradesh, with its great hemispherical dome and intricately carved sandstone torana gateway, under bright daylight and a dramatic cloud-filled sky",
+          male:   "modern cultural heritage explorer and traveller in a lightweight beige linen explorer shirt with the sleeves rolled up, an olive-khaki utility cargo jacket with travel pockets, khaki trekking trousers, brown hiking boots, a brown leather crossbody satchel bag clearly visible across the chest with the strap crossing the shoulder, a vintage leather wristwatch, and a lightweight neutral cotton scarf around the neck",
+          female: "modern cultural heritage explorer and traveller in a light beige safari-style explorer jacket, olive-khaki cargo trousers, comfortable brown trekking boots, a soft natural-cotton stole around the neck, a brown leather crossbody satchel bag clearly visible at the front with the strap crossing the chest and shoulder, a vintage wristwatch — natural travel-photography look, no glamour styling" },
 
-    16: { bg: "Dr. Salim Ali Bird Sanctuary_DSC8234.jpg",
-          setting: "peaceful mangrove forest and tidal creek at the Dr. Salim Ali Bird Sanctuary on Chorão Island, Goa, with arching mangrove branches, a leafy green canopy and still water reflecting the trees",
-          male:   "modern Goan-day birdwatcher in a clean light-olive long-sleeve cotton shirt with a chest pocket, comfortable beige cotton trousers, lightweight canvas walking shoes and a pair of binoculars hanging around the neck — neat, modest, fully clothed smart-casual",
-          female: "modern Goan-day birdwatcher in a clean ivory long-sleeve cotton shirt with a chest pocket, comfortable beige cotton trousers, lightweight canvas walking shoes and a pair of binoculars hanging around the neck — neat, modest, fully clothed smart-casual" },
+    8:  { bg: "Jahaz Mahal Mandu.jpg",
+          setting: "the Jahaz Mahal in the Royal Enclave at Mandu, Madhya Pradesh, on a soft cloudy monsoon day with overcast diffused daylight, lush bright-green monsoon surroundings and atmospheric moisture in the air",
+          male:   "early-1900s Indian heritage traveller in a cream linen kurta shirt, a vintage safari-style overcoat, straight period trousers in muted earth tones, polished brown leather boots, a brown leather satchel bag fully visible at the front, holding a vintage leather field journal — optionally a cream sola topi pith helmet held in the hand",
+          female: "elegant early-1900s heritage lady traveller in an ankle-length linen-and-cotton period travel dress in cream or muted earth tones, a lightweight embroidered cotton shawl draped over the shoulders, a fitted period travel overcoat, brown leather ankle boots, a small vintage brown satchel bag fully visible at the front, holding an antique leather diary — natural historical appearance, no glamour makeup, no bridal styling, no heavy jewellery, modest and fully covered" },
 
-    17: { bg: "Gulmarg landscapes .jpg",
-          setting: "historic wooden Maharani St. Mary's Church set in a sunlit Gulmarg alpine meadow in Kashmir, with daisies and a tall conifer beside it",
-          male:   "very well-dressed gentleman in a tailored charcoal-grey three-piece wool suit, a crisp white shirt, a deep-burgundy silk tie, a neatly folded white pocket square and polished black oxford shoes — formal, refined and fully covered",
-          female: "very well-dressed lady in an elegant tea-length midi dress in deep emerald with three-quarter sleeves and a modest high neckline, layered with a fitted camel wool overcoat, simple pearl earrings and refined low-heeled shoes — formal, graceful and fully covered" },
-
-    19: { bg: "Gulmarg landscapes 3.jpg",
-          setting: "open Gulmarg alpine pasture carpeted with white daisies under a clear blue sky, with a single tree on the horizon, Kashmir",
-          male:   "very well-dressed gentleman in a smart light-grey wool suit, a soft pastel-blue shirt, a navy silk tie and polished oxford shoes — formal, refined and fully covered",
-          female: "very well-dressed lady in an elegant pastel-blue midi dress with three-quarter sleeves and a modest high neckline, layered with a tailored ivory overcoat, simple pearl earrings and refined low-heeled shoes — formal, graceful and fully covered" },
+    14: { bg: "Shesh Shaiya Bandhavgarh.jpg",
+          setting: "beside the ancient moss-covered Shesh Shaiya reclining Vishnu rock-cut sculpture by a still forest pool deep inside the lush green jungle of Bandhavgarh National Park, Madhya Pradesh, with a dense leafy canopy, soft filtered forest light, ferns and vines",
+          male:   "modern wildlife and heritage jungle explorer in an olive-green long-sleeve cotton explorer shirt with a chest pocket, a lightweight khaki safari vest with pockets, rugged khaki trekking cargo trousers, brown jungle trekking boots, a brown leather explorer satchel clearly visible at the front with the strap crossing the chest, a pair of binoculars hanging around the neck, an optional explorer scarf — no weapons",
+          female: "modern wildlife and heritage jungle explorer in a khaki long-sleeve cotton explorer shirt, a lightweight olive safari jacket, comfortable khaki trekking trousers, brown trekking boots, a brown leather crossbody explorer satchel clearly visible at the front with the strap crossing the chest and shoulder, a pair of binoculars or a compact travel camera, a lightweight neutral scarf — natural explorer look, no glamour makeup, no jewellery" },
 };
 
 function buildPrompt(preset, gender) {
     const outfit = gender === "female" ? preset.female : preset.male;
-    return `ABSOLUTE RULE — symbols of marital status. do NOT add any of the following to the person in the output UNLESS that exact symbol is clearly, visibly present on the person in the first reference photo:
-  • sindoor (red or orange vermilion powder in the hair parting)
-  • mangalsutra (black-bead and gold marriage necklace)
-  • kumkum at the parting or forehead
-  • bridal makeup, heavy nath / nose ring, or any other suhaag / saubhagya symbol
-if the reference photo does not show these, the output must not show them — regardless of what the outfit description below suggests, regardless of the cultural setting, and regardless of what is "traditional" for the era or region. inventing these on a person who does not wear them (a child, an unmarried woman, a person of any age or background who simply does not use them) is a critical failure that causes religious and cultural offence. when in doubt, OMIT.
+    return `ABSOLUTE RULE — NEVER add Hindu marital-status symbols. The output image must NEVER show any of the following on the person, under any circumstances:
+  • sindoor / vermilion (any red or orange powder, streak or dot in the hair parting)
+  • mangalsutra (the black-bead-and-gold marriage necklace)
+  • kumkum at the hair parting or on the forehead
+  • bridal makeup, heavy nath / nose ring, or any other suhaag / saubhagya marriage symbol
+This is a hard, non-negotiable prohibition. Do NOT add, invent, paint on, or imply any of these — regardless of what the outfit description below suggests, regardless of the cultural or historical setting, regardless of what is "traditional" for the era or region, and regardless of the person's apparent age, gender or marital status. The hair parting must stay clean with no colour in it, and the neck must carry no marriage necklace. This applies even if the reference photo seems to show one — never reproduce or emphasise it. Adding these symbols to anyone who does not actively choose to wear them causes serious religious and cultural offence and is a critical failure of this task. When styling jewellery and accessories, choose ONLY decorative, non-marital pieces. When in doubt, OMIT.
 
 face-preservation rule: the face in the first reference photo must be preserved exactly in the output. same eyes, same nose, same mouth, same jawline, same skin tone, same age, same expression — every facial detail must be identical to the reference. do not beautify, smooth, slim, stylise, de-age, lighten or reshape the face in any way. if the face does not match the reference exactly, the image is wrong.
 
 age-appropriateness rule: study the apparent age in the reference photo and adapt the outfit accordingly. if the reference shows a child, young girl or teenager, keep the attire age-appropriate — simpler, lighter jewellery; no nath / nose ring; no heavy bridal ornaments; no adult makeup; absolutely no sindoor, mangalsutra or kumkum. treat the outfit description below as a stylistic direction, not a literal checklist — drop any element that is not appropriate for the person's apparent age. a small plain decorative bindi is acceptable only if the person clearly appears to be an adult woman; otherwise omit it.
 
+framing rule: compose the shot from roughly the knees up (a three-quarter / medium portrait), with the person facing the camera fairly front-on and the head and face rendered large, sharp and clearly visible — never a tiny distant full-body figure. the face must occupy a generous portion of the frame so every feature is crisp.
+
 now create an image of this person standing in this ${preset.setting}, dressed like a ${outfit}. please adjust the lights and shadows so the person blends naturally into the scene. the image should look super realistic and natural.`;
 }
 
-async function fetchBackgroundAsDataParts(req, filename) {
+async function fetchBackgroundBuffer(req, filename) {
     const host = req.headers["x-forwarded-host"] || req.headers.host;
     const protocol = req.headers["x-forwarded-proto"] || "https";
     const url = `${protocol}://${host}/assets/backgrounds/${encodeURI(filename)}`;
@@ -145,7 +173,7 @@ async function fetchBackgroundAsDataParts(req, filename) {
     if (!r.ok) throw new Error(`Failed to fetch background (${r.status}): ${url}`);
     const mime = r.headers.get("content-type") || "image/jpeg";
     const buf = Buffer.from(await r.arrayBuffer());
-    return { mimeType: mime, data: buf.toString("base64") };
+    return { buffer: buf, mimeType: mime };
 }
 
 module.exports = async function handler(req, res) {
@@ -154,66 +182,69 @@ module.exports = async function handler(req, res) {
     }
 
     try {
-        await runMulter(req, res);
+        const { fields, files } = await parseMultipart(req);
+        const { presetId, gender } = fields;
+        const userImage = files["userImage"];
 
-        const { presetId, gender } = req.body;
-
-        const fileByField = {};
-        for (const f of req.files || []) fileByField[f.fieldname] = f;
-        const userImage = fileByField["userImage"];
-
-        if (!userImage) return res.status(400).json({ error: "User image is required" });
-        if (!presetId)  return res.status(400).json({ error: "presetId is required" });
+        if (!userImage)         return res.status(400).json({ error: "User image is required" });
+        if (!presetId)          return res.status(400).json({ error: "presetId is required" });
         if (gender !== "male" && gender !== "female") {
-            return res.status(400).json({ error: "gender must be 'male' or 'female'" });
+            return res.status(400).json({ error: "gender must be 'male' or 'female'", received: gender });
         }
 
         const preset = PRESETS[Number(presetId)];
         if (!preset) return res.status(400).json({ error: "Unknown presetId" });
 
-        const geminiKey = process.env.GEMINI_API_KEY;
-        if (!geminiKey) {
+        const openaiKey = process.env.OPENAI_API_KEY;
+        if (!openaiKey) {
             return res.json({
                 success: true,
                 generatedImage: userImage.buffer.toString("base64"),
                 mimeType: userImage.mimetype,
-                note: "Set GEMINI_API_KEY in Vercel env to enable generation.",
+                note: "Set OPENAI_API_KEY in Vercel env to enable generation.",
             });
         }
 
         const prompt = buildPrompt(preset, gender);
         console.log("Prompt:", prompt);
 
-        const backgroundPart = await fetchBackgroundAsDataParts(req, preset.bg);
+        const background = await fetchBackgroundBuffer(req, preset.bg);
 
-        const ai = new GoogleGenAI({ apiKey: geminiKey });
-        const response = await ai.models.generateContent({
-            model: "gemini-3-pro-image-preview",
-            contents: [
-                { inlineData: { mimeType: userImage.mimetype || "image/jpeg", data: userImage.buffer.toString("base64") } },
-                { inlineData: backgroundPart },
-                { text: prompt },
-            ],
-            config: {
-                responseModalities: ["Image"],
-                imageConfig: {
-                    aspectRatio: "3:4",
-                    imageSize: "2K",
-                },
-            },
+        // GPT Image 2 (images/edits). The visitor's photo is passed FIRST so
+        // input_fidelity:"high" anchors on THEIR likeness, then the heritage
+        // background is the second reference for the scene. The model restyles
+        // them into period attire while keeping their face/body recognisable.
+        // A deterministic inswapper face-swap still runs afterwards (client →
+        // /api/faceswap) to lock the exact identity — GPT Image 2 gives the
+        // believable, likeness-aware base; the swap removes all remaining drift.
+        const openai = new OpenAI({ apiKey: openaiKey });
+        const userFile = await toFile(
+            userImage.buffer,
+            userImage.originalname || "face.png",
+            { type: userImage.mimetype || "image/png" },
+        );
+        const bgFile = await toFile(
+            background.buffer,
+            preset.bg,
+            { type: background.mimeType || "image/jpeg" },
+        );
+
+        const result = await openai.images.edit({
+            model: "gpt-image-2",
+            image: [userFile, bgFile],
+            prompt,
+            size: "1024x1536",      // portrait, closest GPT-Image size to the 3:4 layout
+            quality: "high",
+            input_fidelity: "high", // keep the visitor's face/body from image #1
         });
 
-        const parts = response.candidates?.[0]?.content?.parts || [];
-        const imagePart = parts.find(p => p.inlineData);
-        if (!imagePart) {
-            const textPart = parts.find(p => p.text);
-            throw new Error(`No image in response. ${textPart?.text || ""}`.trim());
-        }
+        const b64 = result?.data?.[0]?.b64_json;
+        if (!b64) throw new Error("GPT Image 2 returned no image data");
 
         return res.json({
             success: true,
-            generatedImage: imagePart.inlineData.data,
-            mimeType: imagePart.inlineData.mimeType || "image/jpeg",
+            generatedImage: b64,
+            mimeType: "image/png",
         });
     } catch (error) {
         console.error("❌ Error:", error.message);

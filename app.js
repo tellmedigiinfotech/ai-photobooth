@@ -64,32 +64,33 @@ const el = {
 // lives server-side in api/generate.js (PRESETS). The client just sends
 // presetId + gender.
 const presets = [
+    { id: 5,  name: 'Bhimbetka Rock Shelters',        description: 'Prehistoric sandstone overhang, 30,000 BCE',       backgroundUrl: 'assets/backgrounds/Bhimbetka rock shelter.jpg' },
     { id: 1,  name: 'Khajuraho — Kandariya Mahadev',  description: 'UNESCO-listed Chandela-era sandstone temples',     backgroundUrl: 'assets/backgrounds/Jagdambi Temple , Kandariya Mahadev Temple.jpg' },
     { id: 2,  name: 'Khajuraho — Lakshmana Temple',   description: 'The finely carved 10th-century Chandela temple',   backgroundUrl: 'assets/backgrounds/Lakshmana Temple IMG_9753-HDR.jpg' },
+    { id: 7,  name: 'Sanchi Stupa',                   description: 'UNESCO Buddhist monument with carved toranas',     backgroundUrl: 'assets/backgrounds/Sanchi Stupa.jpg' },
     { id: 3,  name: 'Orchha — Jahangir Mahal',        description: '17th-century Bundela palace, arched courtyards',   backgroundUrl: 'assets/backgrounds/Jahangir Mahal 6 - Copy.jpg' },
     { id: 4,  name: 'Orchha — Jahangir Gate',         description: 'Monumental Bundela-Mughal archway',                backgroundUrl: 'assets/backgrounds/jahangir gate orchha.jpg' },
+    { id: 8,  name: 'Mandu — Jahaz Mahal',            description: 'Ship Palace of the Royal Enclave, monsoon mood',   backgroundUrl: 'assets/backgrounds/Jahaz Mahal Mandu.jpg' },
     { id: 6,  name: 'Maheshwar — Chhatri by the River', description: 'Holkar cenotaphs above the Narmada ghats',       backgroundUrl: 'assets/backgrounds/Chattei River view (7).jpg' },
     { id: 9,  name: 'Krishnabai Holkar Chhatri',      description: "The queen's cenotaph above the Narmada, Maheshwar", backgroundUrl: 'assets/backgrounds/Krishnabai holkar chhatri .jpg' },
     { id: 10, name: 'Indore — Rajwada Palace',        description: 'The seven-storey Holkar palace of Indore',         backgroundUrl: 'assets/backgrounds/Rajwada Indore.jpg' },
     { id: 11, name: 'Indore — Rajwada Courtyard',     description: 'Inside the Holkar royal seat',                     backgroundUrl: 'assets/backgrounds/RajWada 15.jpg' },
+    { id: 14, name: 'Bandhavgarh — Shesh Shaiya',     description: 'Reclining Vishnu in deep Bandhavgarh jungle',      backgroundUrl: 'assets/backgrounds/Shesh Shaiya Bandhavgarh.jpg' },
     { id: 12, name: 'Kheoni Sanctuary — Wilds of MP', description: 'Central Indian teak and sal forest',               backgroundUrl: 'assets/backgrounds/kheoni wildlife sanctuary .jpg', genders: ['male'] },
     { id: 13, name: 'Kheoni Sanctuary — Forest Trail', description: 'Quiet woodland of teak, sal and bamboo',          backgroundUrl: 'assets/backgrounds/kheoni wildlife sanctuary 1.jpg', genders: ['male'] },
-    { id: 14, name: 'Goa — Cabo de Rama Beach',       description: 'Palm-fringed Goan coast at golden-hour sunset',    backgroundUrl: 'assets/backgrounds/Cabo de Rama Beach_DSC9670.jpg' },
-    { id: 15, name: 'Goa — Cola Beach',               description: 'Rocky Goan shoreline framed by forested hills',    backgroundUrl: 'assets/backgrounds/Cola Beach_DSC9401.jpg' },
-    { id: 16, name: 'Goa — Salim Ali Bird Sanctuary', description: "Chorão Island's serene mangrove wetland",          backgroundUrl: 'assets/backgrounds/Dr. Salim Ali Bird Sanctuary_DSC8234.jpg' },
-    { id: 17, name: "Gulmarg — St. Mary's Church",    description: 'Heritage wooden church in a Kashmir alpine meadow', backgroundUrl: 'assets/backgrounds/Gulmarg landscapes .jpg' },
-    { id: 19, name: 'Gulmarg — Daisy Field',          description: 'Open pasture of daisies under Kashmir skies',      backgroundUrl: 'assets/backgrounds/Gulmarg landscapes 3.jpg' },
 ];
 
 // ── Branding overlay ────────────────────────────────────────────
-// Logo + experience locations are composited onto the generated image
-// client-side via canvas — no model involvement, deterministic output,
-// works at full 2K resolution.
-const BRAND_LOGO_SRC = 'assets/brand/aakhon-dekha-logo.png';
-const BRAND_LOCATIONS = ['Bhopal', 'Orchha', 'Maheshwar', 'Boat Club'];
+// Two circular logos are composited onto the generated image client-side
+// via canvas: DAAMS (Madhya Pradesh Directorate of Archaeology) top-left,
+// Aakhon Dekha top-right. The bottom caption shows the actual heritage
+// location of the photo. Deterministic, no model involvement.
+const BRAND_LOGO_LEFT_SRC  = 'assets/brand/daams-logo.png';
+const BRAND_LOGO_RIGHT_SRC = 'assets/brand/aakhon-dekha-final.png';
 
-let brandLogoImage = null;
-let brandLogoPromise = null;
+let brandLogoLeftImage = null;
+let brandLogoRightImage = null;
+let brandLogosPromise = null;
 
 function loadImage(src) {
     return new Promise((resolve, reject) => {
@@ -101,12 +102,17 @@ function loadImage(src) {
     });
 }
 
-function preloadBrandLogo() {
-    if (brandLogoPromise) return brandLogoPromise;
-    brandLogoPromise = loadImage(BRAND_LOGO_SRC)
-        .then(img => { brandLogoImage = img; return img; })
-        .catch(err => { console.warn('Brand logo preload failed:', err); return null; });
-    return brandLogoPromise;
+function preloadBrandLogos() {
+    if (brandLogosPromise) return brandLogosPromise;
+    brandLogosPromise = Promise.all([
+        loadImage(BRAND_LOGO_LEFT_SRC).catch(err => { console.warn('Left logo failed:', err); return null; }),
+        loadImage(BRAND_LOGO_RIGHT_SRC).catch(err => { console.warn('Right logo failed:', err); return null; }),
+    ]).then(([left, right]) => {
+        brandLogoLeftImage = left;
+        brandLogoRightImage = right;
+        return [left, right];
+    });
+    return brandLogosPromise;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -118,7 +124,7 @@ function init() {
     wireEvents();
     loadCameraDevices();
     checkHealth();
-    preloadBrandLogo();
+    preloadBrandLogos();
     if (el.yearSpan) el.yearSpan.textContent = new Date().getFullYear();
 }
 
@@ -351,10 +357,17 @@ async function compressImage(blob, quality = 0.9, maxWidth = 1600) {
     });
 }
 
-// Composite the brand logo (top-left, rounded plate) and the experience
-// locations (bottom-center, dark translucent pill) onto the generated photo.
-// Sizes are proportional to the image so the overlay reads the same on
-// any output resolution.
+function base64ToBlob(b64, mimeType) {
+    const bytes = atob(b64);
+    const arr = new Uint8Array(bytes.length);
+    for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+    return new Blob([arr], { type: mimeType || 'image/png' });
+}
+
+// Composite the brand logo (top-right, circular badge with white ring) and
+// the bilingual tagline (bottom-center, dark translucent rounded plate)
+// onto the generated photo. Sizes are proportional to the image so the
+// overlay reads the same on any output resolution.
 function drawRoundedRect(ctx, x, y, w, h, r) {
     const radius = Math.min(r, w / 2, h / 2);
     ctx.beginPath();
@@ -366,9 +379,32 @@ function drawRoundedRect(ctx, x, y, w, h, r) {
     ctx.closePath();
 }
 
-async function brandifyImage(dataUrl) {
+// Wait for the Eczar webfont to load before drawing — otherwise the canvas
+// silently substitutes a default font and the typography won't match the UI.
+async function ensureBrandFonts(captionSize) {
+    if (!document.fonts || !document.fonts.load) return;
+    try {
+        await document.fonts.load(`700 ${captionSize}px "Eczar"`);
+    } catch (_) { /* fall back to system fonts if Google Fonts fails */ }
+}
+
+// Each new logo is already designed as a circle with its own border/canvas,
+// so we clip+draw without an outer white ring and let the design speak.
+function drawCircularLogo(ctx, logo, cx, cy, diameter) {
+    if (!logo) return;
+    const r = diameter / 2;
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.closePath();
+    ctx.clip();
+    ctx.drawImage(logo, cx - r, cy - r, diameter, diameter);
+    ctx.restore();
+}
+
+async function brandifyImage(dataUrl, locationName) {
     const photo = await loadImage(dataUrl);
-    const logo  = await preloadBrandLogo();
+    const [leftLogo, rightLogo] = await preloadBrandLogos();
 
     const W = photo.naturalWidth;
     const H = photo.naturalHeight;
@@ -381,62 +417,71 @@ async function brandifyImage(dataUrl) {
     // 1. Base photo
     ctx.drawImage(photo, 0, 0, W, H);
 
-    // 2. Logo on a slightly-rounded cream plate, top-left
-    if (logo) {
-        const plateW    = Math.round(W * 0.26);
-        const innerPad  = Math.round(plateW * 0.07);
-        const logoAR    = logo.naturalWidth / logo.naturalHeight;
-        const logoW     = plateW - innerPad * 2;
-        const logoH     = Math.round(logoW / logoAR);
-        const plateH    = logoH + innerPad * 2;
-        const plateX    = Math.round(W * 0.035);
-        const plateY    = Math.round(H * 0.028);
-        const plateR    = Math.max(14, Math.round(plateW * 0.06));
+    // 2. Two mirrored circular logo badges — DAAMS top-left, Aakhon Dekha
+    //    top-right. Same diameter, same vertical inset.
+    const badgeD = Math.round(W * 0.11);
+    const badgeR = badgeD / 2;
+    const inset  = Math.round(W * 0.03);
+    const cyTop  = Math.round(H * 0.03 + badgeR);
+    const cxLeft  = inset + badgeR;
+    const cxRight = W - inset - badgeR;
 
+    // Soft drop shadow drawn as a filled disc — gives both logos a
+    // consistent shadow shape regardless of their own transparency.
+    const drawShadowDisc = (cx, cy) => {
         ctx.save();
-        ctx.shadowColor   = 'rgba(0, 0, 0, 0.32)';
-        ctx.shadowBlur    = Math.round(plateW * 0.05);
-        ctx.shadowOffsetY = Math.round(plateW * 0.012);
-        ctx.fillStyle     = 'rgba(255, 252, 246, 0.94)';
-        drawRoundedRect(ctx, plateX, plateY, plateW, plateH, plateR);
+        ctx.shadowColor   = 'rgba(0, 0, 0, 0.45)';
+        ctx.shadowBlur    = Math.round(badgeD * 0.10);
+        ctx.shadowOffsetY = Math.round(badgeD * 0.025);
+        ctx.fillStyle     = 'rgba(0, 0, 0, 0.55)';
+        ctx.beginPath();
+        ctx.arc(cx, cy, badgeR, 0, Math.PI * 2);
+        ctx.closePath();
         ctx.fill();
         ctx.restore();
+    };
 
-        ctx.drawImage(logo, plateX + innerPad, plateY + innerPad, logoW, logoH);
+    if (leftLogo)  drawShadowDisc(cxLeft,  cyTop);
+    if (rightLogo) drawShadowDisc(cxRight, cyTop);
+
+    if (leftLogo)  drawCircularLogo(ctx, leftLogo,  cxLeft,  cyTop, badgeD);
+    if (rightLogo) drawCircularLogo(ctx, rightLogo, cxRight, cyTop, badgeD);
+
+    // 3. Bottom caption — the actual heritage location of the photo, in
+    //    Eczar Bold, on a soft dark gradient fade.
+    const caption = (locationName || '').trim();
+    if (caption) {
+        const captionSize = Math.max(16, Math.round(H * 0.022));
+        await ensureBrandFonts(captionSize);
+
+        const fontStack   = '"Eczar", "Tiro Devanagari Hindi", "Noto Serif Devanagari", "Kohinoor Devanagari", "Mangal", "Nirmala UI", Georgia, serif';
+        const captionFont = `700 ${captionSize}px ${fontStack}`;
+
+        // 3a. Gradient fade so text reads on any background
+        const gradHeight = Math.round(H * 0.18);
+        const gradTop    = H - gradHeight;
+        const gradient   = ctx.createLinearGradient(0, gradTop, 0, H);
+        gradient.addColorStop(0,    'rgba(0, 0, 0, 0)');
+        gradient.addColorStop(0.55, 'rgba(0, 0, 0, 0.28)');
+        gradient.addColorStop(1,    'rgba(0, 0, 0, 0.55)');
+        ctx.save();
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, gradTop, W, gradHeight);
+        ctx.restore();
+
+        // 3b. Caption text with drop shadow
+        const captionY = H - Math.round(H * 0.05);
+        ctx.save();
+        ctx.font          = captionFont;
+        ctx.textAlign     = 'center';
+        ctx.textBaseline  = 'alphabetic';
+        ctx.shadowColor   = 'rgba(0, 0, 0, 0.85)';
+        ctx.shadowBlur    = Math.round(H * 0.009);
+        ctx.shadowOffsetY = Math.round(H * 0.002);
+        ctx.fillStyle     = '#ffffff';
+        ctx.fillText(caption, W / 2, captionY);
+        ctx.restore();
     }
-
-    // 3. Locations pill, bottom-center
-    const text     = BRAND_LOCATIONS.join('   ·   ');
-    const fontSize = Math.max(18, Math.round(H * 0.022));
-    const fontSpec = `500 ${fontSize}px "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
-
-    ctx.font         = fontSpec;
-    ctx.textAlign    = 'center';
-    ctx.textBaseline = 'middle';
-
-    const textW    = ctx.measureText(text).width;
-    const pillPadX = Math.round(fontSize * 1.4);
-    const pillPadY = Math.round(fontSize * 0.6);
-    const pillW    = Math.round(textW + pillPadX * 2);
-    const pillH    = fontSize + pillPadY * 2;
-    const pillX    = Math.round((W - pillW) / 2);
-    const pillY    = Math.round(H - pillH - H * 0.04);
-    const pillR    = pillH / 2;
-
-    ctx.save();
-    ctx.shadowColor   = 'rgba(0, 0, 0, 0.4)';
-    ctx.shadowBlur    = Math.round(H * 0.012);
-    ctx.shadowOffsetY = Math.round(H * 0.003);
-    ctx.fillStyle     = 'rgba(0, 0, 0, 0.62)';
-    drawRoundedRect(ctx, pillX, pillY, pillW, pillH, pillR);
-    ctx.fill();
-    ctx.restore();
-
-    ctx.font         = fontSpec;
-    ctx.textAlign    = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle    = '#fff';
-    ctx.fillText(text, W / 2, pillY + pillH / 2 + 1);
 
     return canvas.toDataURL('image/jpeg', 0.95);
 }
@@ -445,6 +490,7 @@ const LOADING_HINTS = [
     'Setting the scene…',
     'Tailoring your outfit…',
     'Matching light and shadows…',
+    'Perfecting your likeness…',
     'Adding the final touches…',
     'Almost there…',
 ];
@@ -487,10 +533,36 @@ async function generate() {
             throw new Error(genData.details || genData.error || 'Generation failed');
         }
 
-        const rawDataUrl = `data:${genData.mimeType};base64,${genData.generatedImage}`;
+        // Identity finisher: Gemini repaints the whole image, so the face it
+        // outputs is an approximation. /api/faceswap pastes the visitor's
+        // real face back onto the generated scene. If the swap fails for any
+        // reason we still show the Gemini image — the booth never breaks.
+        let imageB64 = genData.generatedImage;
+        let imageMime = genData.mimeType;
+        if (!genData.note) { // skip the swap when /api/generate ran in mock mode
+            try {
+                const sceneBlob = base64ToBlob(genData.generatedImage, genData.mimeType);
+                const swapForm = new FormData();
+                swapForm.append('sourceImage', userImg, 'face.jpg');
+                swapForm.append('targetImage', sceneBlob, 'scene.png');
+
+                const swapRes = await fetch('/api/faceswap', { method: 'POST', body: swapForm });
+                const swapData = await swapRes.json();
+                if (swapRes.ok && swapData.success && swapData.generatedImage && !swapData.note) {
+                    imageB64 = swapData.generatedImage;
+                    imageMime = swapData.mimeType;
+                } else {
+                    console.warn('Face swap skipped:', swapData.note || swapData.details || swapData.error);
+                }
+            } catch (swapErr) {
+                console.warn('Face swap failed, using Gemini image as-is:', swapErr);
+            }
+        }
+
+        const rawDataUrl = `data:${imageMime};base64,${imageB64}`;
         let finalDataUrl;
         try {
-            finalDataUrl = await brandifyImage(rawDataUrl);
+            finalDataUrl = await brandifyImage(rawDataUrl, state.selectedPreset.name);
         } catch (overlayErr) {
             console.warn('Brand overlay failed, falling back to raw image:', overlayErr);
             finalDataUrl = rawDataUrl;
