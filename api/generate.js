@@ -128,7 +128,7 @@ TASK: Show this exact person on location at ${preset.setting}, dressed as a ${ou
 
 IDENTITY — HIGHEST PRIORITY. Reproduce the person's face from Image 1 exactly: the same eyes, eyebrows, nose, mouth, lips, jawline, face shape, cheekbones, skin tone, complexion, hairline, apparent age and natural expression. This must be unmistakably the SAME person — a viewer who knows them should recognise them instantly. Do NOT beautify, smooth, slim, sharpen the jaw, enlarge the eyes, de-age, lighten the skin, or restyle the face in any way. If the face is even slightly a different person, the image has failed.${bodyRule}
 
-FRAMING. A three-quarter, knees-up medium portrait. The person faces the camera close to front-on, with the head and face rendered LARGE, sharp, in focus and well-lit — occupying a generous, clearly readable portion of the frame. Never a small or distant full-body figure; never crop at the neck or chin.
+FRAMING & POSE. A natural waist-up or three-quarter portrait with the face clearly visible, sharp and well-lit. Use a RELAXED, candid pose — a natural stance with weight shifted easily, a calm genuine expression or a soft natural smile, perhaps a slight turn of the head or shoulders. Do NOT make it a stiff, rigid, perfectly symmetrical, straight-on "mugshot". It should feel like a real travel photograph someone actually posed for at the site, not a posed studio cut-out.
 
 WARDROBE. Dress them in the period attire described above, fitted naturally to their body and pose, historically grounded and tasteful. Do not let the wardrobe change the face or body build.
 
@@ -136,7 +136,9 @@ ABSOLUTE PROHIBITION — never add any Hindu marital-status symbol to anyone, un
 
 AGE-APPROPRIATE. Match the person's apparent age. If they appear to be a child or teenager, keep the styling simple and light — no nose ring, no heavy ornaments, no adult makeup, no bindi — and drop any wardrobe element that is not suitable for their age. A small plain decorative bindi is acceptable only for an adult woman; otherwise omit it.
 
-INTEGRATION. Match the lighting direction, colour temperature, shadows, perspective and depth of the location in ${locImage} so the person sits naturally in the scene. Professional, realistic photography with natural skin texture — not plastic, waxy or over-retouched.`;
+INTEGRATION. Match the lighting direction, colour temperature, shadows, perspective and depth of the location in ${locImage} so the person sits naturally in the scene.
+
+PHOTOREALISM — CRITICAL. The result MUST look like a genuine photograph taken on a professional full-frame camera with an 85mm portrait lens — NOT a digital illustration, NOT a 3D render, NOT a glossy "AI-generated" image. Render true-to-life skin with natural texture: visible pores, fine lines, slight natural blemishes and asymmetry, realistic subsurface tone variation and a natural matte sheen — never airbrushed, plastic, waxy, smoothed or doll-like. Real catchlights in the eyes, individual hair strands with a few natural flyaways, fabric with genuine weave, folds and wrinkles. Use natural, slightly uneven daylight, a shallow depth of field with the background gently out of focus, and photographic colour grading (not over-saturated AI colour). Subtle film grain is welcome. The face especially must read as a real human photographed in the moment, not a rendered or beautified likeness.`;
 }
 
 async function fetchBackgroundBuffer(req, filename) {

@@ -653,35 +653,10 @@ async function generate() {
             throw new Error(genData.details || genData.error || 'Generation failed');
         }
 
-        // Stage 2 — face-swap the visitor's real face onto the generated scene to
-        // lock identity exactly. Skipped in mock mode (genData.note). If the swap
-        // fails we still show the generated image — the booth never breaks.
-        let imageB64 = genData.generatedImage;
-        let imageMime = genData.mimeType;
-        if (!genData.note) {
-            try {
-                const sceneDataUrl = `data:${genData.mimeType};base64,${genData.generatedImage}`;
-                const swapRes = await fetch('/api/faceswap', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        sourceImage: userImageDataUrl,
-                        targetImage: sceneDataUrl,
-                    }),
-                });
-                const swapData = await swapRes.json();
-                if (swapRes.ok && swapData.success && swapData.generatedImage && !swapData.note) {
-                    imageB64 = swapData.generatedImage;
-                    imageMime = swapData.mimeType;
-                } else {
-                    console.warn('Face swap skipped:', swapData.note || swapData.details || swapData.error);
-                }
-            } catch (swapErr) {
-                console.warn('Face swap failed, using generated image as-is:', swapErr);
-            }
-        }
-
-        const rawDataUrl = `data:${imageMime};base64,${imageB64}`;
+        // GPT Image 2 is the whole pipeline now — it renders the person (face +
+        // body) into the scene directly. No face-swap step: it was making faces
+        // look stiff/over-processed, and the native render reads more natural.
+        const rawDataUrl = `data:${genData.mimeType};base64,${genData.generatedImage}`;
         let finalDataUrl;
         try {
             finalDataUrl = await brandifyImage(rawDataUrl, state.selectedPreset.name);
