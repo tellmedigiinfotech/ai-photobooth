@@ -126,11 +126,6 @@ const PRESETS = {
     // 7   Sanchi Stupa               → modern cultural heritage explorer
     // 8   Mandu Jahaz Mahal          → early-1900s Indian heritage traveller
     // 14  Bandhavgarh Shesh Shaiya   → modern jungle / wildlife explorer
-    5:  { bg: "Bhimbetka rock shelter.jpg",
-          setting: "ancient Bhimbetka rock shelters in Madhya Pradesh during the prehistoric era around 30,000 BCE, beneath the dramatic overhanging sandstone outcrop, with a warm-toned untouched primeval landscape and no modern structures, paths or visitors anywhere in frame",
-          male:   "prehistoric paleolithic cave artist in a short rough animal-hide loincloth in earthy browns with ochre stains low on the hips, a fiber rope belt holding small pigment pouches and twig brushes, a simple bone-bead necklace, a bare torso streaked with red, white and ochre paints mimicking Bhimbetka cave art motifs, wild hair tied back with vine and feathers, paint-splattered hands",
-          female: "prehistoric paleolithic gatherer in a fringed grass skirt in earthy beige with leaf patterns ending at mid-calf, a rough bark-cloth shawl draped over one shoulder and tied at the waist with a fiber rope belt set with small shell beads, subtle red ochre body-paint streaks on the arms mimicking Bhimbetka cave art motifs, a simple feather-and-bone necklace, long hair loose with small wildflower accents — modest, fully covered" },
-
     7:  { bg: "Sanchi Stupa.jpg",
           setting: "the UNESCO World Heritage Site of Sanchi Stupa in Madhya Pradesh, with its great hemispherical dome and intricately carved sandstone torana gateway, under bright daylight and a dramatic cloud-filled sky",
           male:   "modern cultural heritage explorer and traveller in a lightweight beige linen explorer shirt with the sleeves rolled up, an olive-khaki utility cargo jacket with travel pockets, khaki trekking trousers, brown hiking boots, a brown leather crossbody satchel bag clearly visible across the chest with the strap crossing the shoulder, a vintage leather wristwatch, and a lightweight neutral cotton scarf around the neck",
@@ -147,25 +142,38 @@ const PRESETS = {
           female: "modern wildlife and heritage jungle explorer in a khaki long-sleeve cotton explorer shirt, a lightweight olive safari jacket, comfortable khaki trekking trousers, brown trekking boots, a brown leather crossbody explorer satchel clearly visible at the front with the strap crossing the chest and shoulder, a pair of binoculars or a compact travel camera, a lightweight neutral scarf — natural explorer look, no glamour makeup, no jewellery" },
 };
 
-function buildPrompt(preset, gender) {
+function buildPrompt(preset, gender, hasBody) {
     const outfit = gender === "female" ? preset.female : preset.male;
-    return `Create ONE photorealistic portrait by combining the two reference images.
+    // Image legend + body-type rule adapt to whether a full-body shot was sent.
+    const legend = hasBody
+        ? `IMAGE 1 = the person's FACE (close-up) — use this for facial likeness.
+IMAGE 2 = a full-body photo of the SAME person — use this ONLY to read their body type, build and proportions (height, weight, frame). Ignore the clothing, pose and background in Image 2.
+IMAGE 3 = the LOCATION (a real heritage site) — use this as the background and for scene lighting.`
+        : `IMAGE 1 = the person's FACE — use this for facial likeness.
+IMAGE 2 = the LOCATION (a real heritage site) — use this as the background and for scene lighting.`;
+    const bodyRule = hasBody
+        ? `
 
-IMAGE 1 = THE PERSON (the subject). IMAGE 2 = THE LOCATION (a real heritage site, used as the background and for accurate scene lighting).
+BODY TYPE — render the person with the SAME body build and proportions as the full-body person in Image 2: the same overall size and weight (slim, average or heavier), the same shoulder width and frame. Do not slim them down or bulk them up — match Image 2's build honestly.`
+        : "";
+    const locImage = hasBody ? "Image 3" : "Image 2";
+    return `Create ONE photorealistic portrait by combining the reference images.
 
-TASK: Show the exact person from Image 1 on location at ${preset.setting}, dressed as a ${outfit}. The result must look like a genuine photograph of that same individual taken at that place.
+${legend}
 
-1. IDENTITY — HIGHEST PRIORITY. Reproduce the person's face from Image 1 exactly: the same eyes, eyebrows, nose, mouth, lips, jawline, face shape, cheekbones, skin tone, complexion, hairline, apparent age and natural expression. This must be unmistakably the SAME person — a viewer who knows them should recognise them instantly. Do NOT beautify, smooth, slim, sharpen the jaw, enlarge the eyes, de-age, lighten the skin, or restyle the face in any way. Preserve their real body type and build. If the face is even slightly a different person, the image has failed.
+TASK: Show this exact person on location at ${preset.setting}, dressed as a ${outfit}. The result must look like a genuine photograph of that same individual taken at that place.
 
-2. FRAMING. A three-quarter, knees-up medium portrait. The person faces the camera close to front-on, with the head and face rendered LARGE, sharp, in focus and well-lit — occupying a generous, clearly readable portion of the frame. Never a small or distant full-body figure; never crop at the neck or chin.
+IDENTITY — HIGHEST PRIORITY. Reproduce the person's face from Image 1 exactly: the same eyes, eyebrows, nose, mouth, lips, jawline, face shape, cheekbones, skin tone, complexion, hairline, apparent age and natural expression. This must be unmistakably the SAME person — a viewer who knows them should recognise them instantly. Do NOT beautify, smooth, slim, sharpen the jaw, enlarge the eyes, de-age, lighten the skin, or restyle the face in any way. If the face is even slightly a different person, the image has failed.${bodyRule}
 
-3. WARDROBE. Replace only the clothing with the period attire described above, fitted naturally to the person's body and pose, historically grounded and tasteful. Do not let the wardrobe change the face or body.
+FRAMING. A three-quarter, knees-up medium portrait. The person faces the camera close to front-on, with the head and face rendered LARGE, sharp, in focus and well-lit — occupying a generous, clearly readable portion of the frame. Never a small or distant full-body figure; never crop at the neck or chin.
 
-4. ABSOLUTE PROHIBITION — never add any Hindu marital-status symbol to anyone, under any circumstances: no sindoor / vermilion (red or orange powder, streak or dot) in the hair parting, no kumkum dot implying marriage, no mangalsutra (black-bead-and-gold marriage necklace), no bridal makeup, no heavy nath / nose ring, no other suhaag or saubhagya marriage marker. The hair parting stays clean with no colour; the neck carries no marriage necklace. This holds regardless of the era, region, tradition, the outfit description, or the person's apparent age or gender — and even if Image 1 appears to show one, do not reproduce it. Use ONLY decorative, non-marital jewellery; when in doubt, omit it. Adding these symbols causes serious cultural and religious offence and is a critical failure.
+WARDROBE. Dress them in the period attire described above, fitted naturally to their body and pose, historically grounded and tasteful. Do not let the wardrobe change the face or body build.
 
-5. AGE-APPROPRIATE. Match the person's apparent age in Image 1. If they appear to be a child or teenager, keep the styling simple and light — no nose ring, no heavy ornaments, no adult makeup, no bindi — and drop any wardrobe element that is not suitable for their age. A small plain decorative bindi is acceptable only for an adult woman; otherwise omit it.
+ABSOLUTE PROHIBITION — never add any Hindu marital-status symbol to anyone, under any circumstances: no sindoor / vermilion (red or orange powder, streak or dot) in the hair parting, no kumkum dot implying marriage, no mangalsutra (black-bead-and-gold marriage necklace), no bridal makeup, no heavy nath / nose ring, no other suhaag or saubhagya marriage marker. The hair parting stays clean with no colour; the neck carries no marriage necklace. This holds regardless of the era, region, tradition, the outfit description, or the person's apparent age or gender — and even if a reference image appears to show one, do not reproduce it. Use ONLY decorative, non-marital jewellery; when in doubt, omit it. Adding these symbols causes serious cultural and religious offence and is a critical failure.
 
-6. INTEGRATION. Match the lighting direction, colour temperature, shadows, perspective and depth of the location in Image 2 so the person sits naturally in the scene. Professional, realistic photography with natural skin texture — not plastic, waxy or over-retouched.`;
+AGE-APPROPRIATE. Match the person's apparent age. If they appear to be a child or teenager, keep the styling simple and light — no nose ring, no heavy ornaments, no adult makeup, no bindi — and drop any wardrobe element that is not suitable for their age. A small plain decorative bindi is acceptable only for an adult woman; otherwise omit it.
+
+INTEGRATION. Match the lighting direction, colour temperature, shadows, perspective and depth of the location in ${locImage} so the person sits naturally in the scene. Professional, realistic photography with natural skin texture — not plastic, waxy or over-retouched.`;
 }
 
 async function fetchBackgroundBuffer(req, filename) {
@@ -187,7 +195,8 @@ module.exports = async function handler(req, res) {
     try {
         const { fields, files } = await parseMultipart(req);
         const { presetId, gender } = fields;
-        const userImage = files["userImage"];
+        const userImage = files["userImage"]; // face close-up (Image 1)
+        const bodyImage = files["bodyImage"]; // full-body shot (Image 2) — optional
 
         if (!userImage)         return res.status(400).json({ error: "User image is required" });
         if (!presetId)          return res.status(400).json({ error: "presetId is required" });
@@ -208,19 +217,20 @@ module.exports = async function handler(req, res) {
             });
         }
 
-        const prompt = buildPrompt(preset, gender);
+        const prompt = buildPrompt(preset, gender, !!bodyImage);
         console.log("Prompt:", prompt);
 
         const background = await fetchBackgroundBuffer(req, preset.bg);
 
-        // GPT Image 2 (images/edits). The visitor's photo is passed FIRST so the
-        // model anchors on THEIR likeness, then the heritage background is the
-        // second reference for the scene. The model restyles them into period
-        // attire while keeping their face/body recognisable. (gpt-image-2 has no
-        // input_fidelity knob — it handles identity natively.) A deterministic
-        // inswapper face-swap still runs afterwards (client → /api/faceswap) to
-        // lock the exact identity: GPT Image 2 gives the believable, likeness-
-        // aware base; the swap removes all remaining drift.
+        // GPT Image 2 (images/edits) with up to THREE inputs, in prompt order:
+        //   Image 1 = face close-up  → facial likeness
+        //   Image 2 = full-body shot → body type / build (optional)
+        //   Image 3 = heritage photo → background + scene lighting
+        // The model renders the person in period attire at the location, matching
+        // their face AND their real body build. A deterministic inswapper
+        // face-swap still runs afterwards (client → /api/faceswap) to lock the
+        // exact identity. gpt-image-2 has no input_fidelity knob — it handles
+        // identity natively, and the swap removes any remaining drift.
         const openai = new OpenAI({ apiKey: openaiKey });
         const userFile = await toFile(
             userImage.buffer,
@@ -232,14 +242,26 @@ module.exports = async function handler(req, res) {
             preset.bg,
             { type: background.mimeType || "image/jpeg" },
         );
+        // Body image is optional — if absent, fall back to a two-image prompt.
+        const inputImages = [userFile];
+        if (bodyImage) {
+            inputImages.push(await toFile(
+                bodyImage.buffer,
+                bodyImage.originalname || "body.jpg",
+                { type: bodyImage.mimetype || "image/jpeg" },
+            ));
+        }
+        inputImages.push(bgFile);
 
         const result = await openai.images.edit({
             model: "gpt-image-2",
-            image: [userFile, bgFile],
+            image: inputImages,
             prompt,
             size: "1024x1536",      // portrait, closest GPT-Image size to the 3:4 layout
             quality: "medium",      // ~71s, ~₹6/photo; the face-swap finisher locks
                                     // identity so high's extra detail/latency isn't worth 3x
+            output_format: "jpeg",
+            output_compression: 90,
         });
 
         const b64 = result?.data?.[0]?.b64_json;

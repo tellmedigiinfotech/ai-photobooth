@@ -1,10 +1,10 @@
 {
   "functions": {
-    "api/faceswap.js": {
-      "maxDuration": 60
+    "api/generate.js": {
+      "maxDuration": 300
     },
-    "api/classify-build.js": {
-      "maxDuration": 30
+    "api/faceswap.js": {
+      "maxDuration": 120
     }
   }
 }

@@ -764,8 +764,6 @@ p { margin: 0; color: var(--c-ink-soft); }
     color: var(--c-accent);
     margin: 0 0 var(--s-2);
 }
-/* Body-type selector sits just below the gender toggle. */
-.build-toggle { margin-top: var(--s-4); }
 
 .destinations {
     display: grid;

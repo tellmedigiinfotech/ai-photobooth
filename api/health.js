@@ -1,14 +1,12 @@
 module.exports = async function handler(req, res) {
-    // Runtime deps: Replicate powers the face-swap (essential); OpenAI powers
-    // the body-build classifier (optional — the app defaults to "average").
-    // Scene generation is now offline (frozen templates), so Gemini/OpenAI image
-    // generation is NOT a runtime dependency.
-    const replicateConfigured = !!process.env.REPLICATE_API_TOKEN;
+    // Runtime deps: OpenAI powers per-user scene generation (gpt-image-2) and
+    // Replicate powers the face-swap finisher. Both are essential.
     const openaiConfigured = !!process.env.OPENAI_API_KEY;
+    const replicateConfigured = !!process.env.REPLICATE_API_TOKEN;
     res.json({
         status: "ok",
-        apiKeyConfigured: replicateConfigured, // the booth works as long as the swap can run
-        replicateConfigured,
+        apiKeyConfigured: openaiConfigured && replicateConfigured,
         openaiConfigured,
+        replicateConfigured,
     });
 };

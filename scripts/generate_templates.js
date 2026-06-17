@@ -1,18 +1,18 @@
-// Offline hero-template factory for the photobooth.
+// Offline picker-sample factory for the photobooth.
 //
-// Generates a frozen, ops-approvable "sample output" per preset × gender × build
-// using GPT Image 2 (images/edits with the real heritage background as the canvas).
-// At runtime the app NO LONGER generates per user — it just face-swaps the visitor
-// onto one of these frozen templates, so the background never changes and output
-// is predictable. The face in each template is a generic forward-facing face that
-// gets replaced by the swap; only the BODY BUILD and scene matter here.
+// Generates ONE representative "sample output" per preset × gender using GPT
+// Image 2 (images/edits with the real heritage background as the canvas). These
+// samples are shown in the destination picker so a visitor sees the kind of
+// result a destination produces. They are NOT used at runtime — the live app
+// generates each visitor's photo from their own face + body shots and then
+// face-swaps. So these are purely illustrative; the face here is a generic one.
 //
 // Usage:
-//   node scripts/generate_templates.js <presetId|all> [male|female|both] [slim|average|heavier|all]
-//   e.g. node scripts/generate_templates.js 3 male all        # validate one preset, all builds
-//        node scripts/generate_templates.js all both all      # full bulk run (~78 images)
+//   node scripts/generate_templates.js <presetId|all> [male|female|both]
+//   e.g. node scripts/generate_templates.js all both      # fill in every sample
+//        node scripts/generate_templates.js 8 both        # just preset 8
 //
-// Output: assets/templates/preset-<id>-<gender>-<build>.jpg
+// Output: assets/templates/sample-<id>-<gender>.jpg  (skips existing)
 const fs = require("fs");
 const path = require("path");
 const OpenAI = require("openai");
@@ -26,51 +26,41 @@ const BG_DIR = path.join(__dirname, "..", "assets", "backgrounds");
 const QUALITY = process.env.TEMPLATE_QUALITY || "medium"; // medium ≈ ₹6, high ≈ ₹16.5
 const USD_INR = 86;
 
-const BUILDS = {
-    slim:    "a slim, slender, lean body build",
-    average: "an average, medium body build",
-    heavier: "a noticeably fuller, heavier-set, plus-size body build",
-};
-
 // Which genders each preset supports (mirror of the client's `genders` field).
 const MALE_ONLY = new Set([12, 13]);
 function gendersFor(id) {
     return MALE_ONLY.has(id) ? ["male"] : ["male", "female"];
 }
 
-function buildTemplatePrompt(preset, gender, buildKey) {
+function buildSamplePrompt(preset, gender) {
     const outfit = gender === "female" ? preset.female : preset.male;
     const person = gender === "female" ? "woman" : "man";
-    const build = BUILDS[buildKey];
-    return `Use the provided photograph of ${preset.setting} as the background, and add ONE ${person} standing naturally in the scene, dressed as a ${outfit}. The result must look like a real photograph of a person at that location.
+    return `Use the provided photograph of ${preset.setting} as the background, and add ONE ${person} of average build standing naturally in the scene, dressed as a ${outfit}. The result must look like a real photograph of a person at that location.
 
-BODY BUILD — IMPORTANT: render the ${person} with ${build}. This build must be clearly and unmistakably visible in the figure's proportions.
-
-FACE: give them a clear, neutral, FORWARD-FACING face looking straight toward the camera, evenly lit, unobstructed, with a natural relaxed closed-mouth expression. (This face will be replaced later by compositing, so it must be front-on, clean and well exposed.)
+FACE: a clear, neutral, FORWARD-FACING face looking straight toward the camera, evenly lit, unobstructed, with a natural relaxed closed-mouth expression.
 
 FRAMING: a three-quarter, knees-up medium portrait. The ${person} faces the camera close to front-on, with the head and face rendered LARGE, sharp and well-lit, occupying a generous, clearly readable portion of the frame. Never a small or distant figure; never crop at the neck or chin.
 
-WARDROBE: the period attire described above, fitted naturally to ${build}, historically grounded and tasteful.
+WARDROBE: the period attire described above, fitted naturally, historically grounded and tasteful.
 
 ABSOLUTE PROHIBITION — never add any Hindu marital-status symbol: no sindoor / vermilion (red or orange powder, streak or dot) in the hair parting, no kumkum marriage dot, no mangalsutra (black-bead marriage necklace), no bridal makeup, no heavy nath / nose ring. Use ONLY decorative, non-marital jewellery; when in doubt, omit it.
 
 INTEGRATION: match the lighting direction, colour temperature, shadows, perspective and depth of the background so the person sits naturally in the scene. Photorealistic, natural skin texture, professional photography — not plastic, waxy or over-retouched.`;
 }
 
-async function genOne(openai, preset, id, gender, buildKey) {
-    const outPath = path.join(OUT_DIR, `preset-${id}-${gender}-${buildKey}.jpg`);
+async function genOne(openai, preset, id, gender) {
+    const outPath = path.join(OUT_DIR, `sample-${id}-${gender}.jpg`);
     if (process.env.SKIP_EXISTING !== "0" && fs.existsSync(outPath)) {
         return { outPath, usd: 0, skipped: true };
     }
-    const bgPath = path.join(BG_DIR, preset.bg);
-    const bgFile = await toFile(fs.readFileSync(bgPath), preset.bg, { type: "image/jpeg" });
+    const bgFile = await toFile(fs.readFileSync(path.join(BG_DIR, preset.bg)), preset.bg, { type: "image/jpeg" });
     const result = await openai.images.edit({
         model: "gpt-image-2",
         image: [bgFile],
-        prompt: buildTemplatePrompt(preset, gender, buildKey),
+        prompt: buildSamplePrompt(preset, gender),
         size: "1024x1536",
         quality: QUALITY,
-        output_format: "jpeg",     // ~300KB vs ~2.7MB PNG — keeps the repo/deploy lean
+        output_format: "jpeg",
         output_compression: 85,
     });
     const b64 = result?.data?.[0]?.b64_json;
@@ -93,32 +83,25 @@ async function genOne(openai, preset, id, gender, buildKey) {
 
     const presetArg = process.argv[2] || "all";
     const genderArg = process.argv[3] || "both";
-    const buildArg = process.argv[4] || "all";
-
     const presetIds = presetArg === "all" ? Object.keys(PRESETS).map(Number) : [Number(presetArg)];
-    const buildKeys = buildArg === "all" ? Object.keys(BUILDS) : [buildArg];
 
-    // Build the work list.
     const jobs = [];
     for (const id of presetIds) {
         const preset = PRESETS[id];
         if (!preset) { console.warn(`skip unknown preset ${id}`); continue; }
         const genders = genderArg === "both" ? gendersFor(id) : [genderArg].filter(g => gendersFor(id).includes(g));
-        for (const gender of genders) {
-            for (const buildKey of buildKeys) jobs.push({ id, preset, gender, buildKey });
-        }
+        for (const gender of genders) jobs.push({ id, preset, gender });
     }
-    console.log(`Generating ${jobs.length} templates (quality=${QUALITY})...`);
+    console.log(`Generating ${jobs.length} picker samples (quality=${QUALITY})...`);
 
-    // Modest concurrency to respect image rate limits (Tier 1 = 5/min).
     const CONCURRENCY = Number(process.env.TEMPLATE_CONCURRENCY || 3);
     let totalUsd = 0, done = 0, failed = 0;
     for (let i = 0; i < jobs.length; i += CONCURRENCY) {
         const batch = jobs.slice(i, i + CONCURRENCY);
-        const results = await Promise.allSettled(batch.map(j => genOne(openai, j.preset, j.id, j.gender, j.buildKey)));
+        const results = await Promise.allSettled(batch.map(j => genOne(openai, j.preset, j.id, j.gender)));
         results.forEach((r, k) => {
             const j = batch[k];
-            const tag = `preset-${j.id}-${j.gender}-${j.buildKey}`;
+            const tag = `sample-${j.id}-${j.gender}`;
             if (r.status === "fulfilled") {
                 totalUsd += r.value.usd; done++;
                 const label = r.value.skipped ? "exists, skipped" : `₹${(r.value.usd * USD_INR).toFixed(2)}`;

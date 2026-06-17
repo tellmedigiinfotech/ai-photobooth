@@ -7,9 +7,9 @@
 const state = {
     step: 1,
     stream: null,
-    // Two-shot capture: a face close-up (drives the face-swap) and a full-body
-    // shot (drives the body-build match). `pending*` holds the shot currently
-    // under review before it's confirmed into face*/body*.
+    // Two-shot capture: a face close-up (Image 1 → facial likeness) and a
+    // full-body shot (Image 2 → body type). Both are sent to /api/generate.
+    // `pending*` holds the shot under review before it's confirmed.
     capturePhase: 'face',        // 'face' | 'body'
     pendingBlob: null,
     pendingUrl: null,
@@ -19,16 +19,13 @@ const state = {
     bodyUrl: null,
     selectedPreset: null,
     selectedGender: null,
-    selectedBuild: 'average',    // slim | average | heavier — body-build template variant
     cameraDevices: [],
 };
 
-const BUILDS = ['slim', 'average', 'heavier'];
-
-// The frozen, ops-approved hero template for a (preset, gender, build). The app
-// face-swaps the visitor onto this exact image, so the background never changes.
-function templateUrl(presetId, gender, build) {
-    return `assets/templates/preset-${presetId}-${gender || 'male'}-${build || 'average'}.jpg`;
+// The picker sample (1 per preset+gender) — shown so the visitor sees the kind
+// of result a destination produces. Falls back to the raw background if absent.
+function sampleUrl(presetId, gender) {
+    return `assets/templates/sample-${presetId}-${gender || 'male'}.jpg`;
 }
 
 // ── DOM ──────────────────────────────────────────────────────────
@@ -62,9 +59,6 @@ const el = {
     contextPhoto:       $('contextPhoto'),
     editPhotoBtn:       $('editPhotoBtn'),
     genderRadios:       document.querySelectorAll('input[name="gender"]'),
-    buildToggle:        $('buildToggle'),
-    buildRadios:        document.querySelectorAll('input[name="build"]'),
-    buildPrompt:        $('buildPrompt'),
     presetsGrid:        $('presetsGrid'),
     generateBtn:        $('generateBtn'),
     selectedDestName:   $('selectedDestinationName'),
@@ -89,7 +83,6 @@ const el = {
 // lives server-side in api/generate.js (PRESETS). The client just sends
 // presetId + gender.
 const presets = [
-    { id: 5,  name: 'Bhimbetka Rock Shelters',        description: 'Prehistoric sandstone overhang, 30,000 BCE',       backgroundUrl: 'assets/backgrounds/Bhimbetka rock shelter.jpg' },
     { id: 1,  name: 'Khajuraho — Kandariya Mahadev',  description: 'UNESCO-listed Chandela-era sandstone temples',     backgroundUrl: 'assets/backgrounds/Jagdambi Temple , Kandariya Mahadev Temple.jpg' },
     { id: 2,  name: 'Khajuraho — Lakshmana Temple',   description: 'The finely carved 10th-century Chandela temple',   backgroundUrl: 'assets/backgrounds/Lakshmana Temple IMG_9753-HDR.jpg' },
     { id: 7,  name: 'Sanchi Stupa',                   description: 'UNESCO Buddhist monument with carved toranas',     backgroundUrl: 'assets/backgrounds/Sanchi Stupa.jpg' },
@@ -330,7 +323,7 @@ async function confirmCaptureAndAdvance() {
         return;
     }
 
-    // body phase
+    // body phase — both shots captured, move on to pick a destination.
     state.bodyBlob = state.pendingBlob;
     if (state.bodyUrl) URL.revokeObjectURL(state.bodyUrl);
     state.bodyUrl = state.pendingUrl;
@@ -338,37 +331,6 @@ async function confirmCaptureAndAdvance() {
     state.pendingUrl = null;
 
     goToStep(2);
-    classifyBuild(state.bodyBlob); // async; preselects the body-type radio
-}
-
-// Ask the server to classify the full-body shot as slim/average/heavier and
-// preselect it. Non-blocking and best-effort — the operator can always adjust,
-// and we default to "average" if it fails.
-async function classifyBuild(bodyBlob) {
-    el.buildPrompt.textContent = 'Reading your body type…';
-    try {
-        const img = await compressImage(bodyBlob, 0.85, 1024);
-        const form = new FormData();
-        form.append('bodyImage', img, 'body.jpg');
-        const res = await fetch('/api/classify-build', { method: 'POST', body: form });
-        const data = await res.json();
-        if (res.ok && data.build && BUILDS.includes(data.build)) {
-            setBuild(data.build);
-            el.buildPrompt.textContent = 'Body type — matched from your full-body photo, adjust if needed';
-        } else {
-            throw new Error(data.error || 'no build');
-        }
-    } catch (err) {
-        console.warn('Build classification failed, defaulting to average:', err);
-        setBuild('average');
-        el.buildPrompt.textContent = 'Body type — pick the closest match';
-    }
-}
-
-function setBuild(build) {
-    state.selectedBuild = BUILDS.includes(build) ? build : 'average';
-    el.buildRadios.forEach(r => { r.checked = (r.value === state.selectedBuild); });
-    renderDestinations(); // hero thumbnails reflect the chosen build
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -381,7 +343,6 @@ function visiblePresets() {
 
 function renderDestinations() {
     const gender = state.selectedGender || 'male';
-    const build = state.selectedBuild || 'average';
     const frag = document.createDocumentFragment();
     visiblePresets().forEach(p => {
         const card = document.createElement('button');
@@ -391,12 +352,12 @@ function renderDestinations() {
         card.setAttribute('aria-checked', state.selectedPreset?.id === p.id ? 'true' : 'false');
         if (state.selectedPreset?.id === p.id) card.classList.add('is-selected');
         card.dataset.presetId = p.id;
-        // Show the actual frozen hero template the visitor will receive (minus
-        // their face). Falls back to the raw background if a template is missing.
-        const tpl = templateUrl(p.id, gender, build);
+        // Show a sample of the kind of result this destination produces. Falls
+        // back to the raw heritage background if no sample exists yet.
+        const sample = sampleUrl(p.id, gender);
         card.innerHTML = `
             <div class="destination-card__media">
-                <img src="${tpl}" alt="" loading="lazy"
+                <img src="${sample}" alt="" loading="lazy"
                      onerror="this.onerror=null;this.src='${p.backgroundUrl}'" />
             </div>
             <div class="destination-card__check" aria-hidden="true">
@@ -645,37 +606,47 @@ async function generate() {
 
     try {
         const userImg = await compressImage(state.faceBlob, 0.95, 2048);
+        const bodyImg = state.bodyBlob ? await compressImage(state.bodyBlob, 0.9, 1536) : null;
 
-        // Fetch the frozen, ops-approved hero template for this preset + gender
-        // + body build. We DON'T generate a scene per user — we only swap the
-        // visitor's face onto this fixed image, so the background is identical
-        // every time and the output is predictable.
-        const tplResp = await fetch(templateUrl(state.selectedPreset.id, state.selectedGender, state.selectedBuild));
-        if (!tplResp.ok) throw new Error('This look isn’t ready yet — please pick another destination.');
-        const templateBlob = await tplResp.blob();
+        // Stage 1 — GPT Image 2 generates the scene from the face (Image 1),
+        // the full-body shot (Image 2 → body type), and the heritage background.
+        const genForm = new FormData();
+        genForm.append('userImage', userImg, 'face.jpg');
+        if (bodyImg) genForm.append('bodyImage', bodyImg, 'body.jpg');
+        genForm.append('presetId', String(state.selectedPreset.id));
+        genForm.append('gender', state.selectedGender);
 
-        // Face-swap the visitor onto the template.
-        const swapForm = new FormData();
-        swapForm.append('sourceImage', userImg, 'face.jpg');
-        swapForm.append('targetImage', templateBlob, 'template.png');
-
-        const swapRes = await fetch('/api/faceswap', { method: 'POST', body: swapForm });
-        const swapData = await swapRes.json();
-        if (!swapRes.ok || !swapData.success) {
-            throw new Error(swapData.details || swapData.error || 'Face swap failed');
+        const genRes = await fetch('/api/generate', { method: 'POST', body: genForm });
+        const genData = await genRes.json();
+        if (!genRes.ok || !genData.success) {
+            throw new Error(genData.details || genData.error || 'Generation failed');
         }
 
-        // swapData.note means the swap couldn't run (e.g. no Replicate token) —
-        // it returns the template unchanged. That's a config issue, not a result
-        // we'd want to hand a visitor (it'd show a stranger's face), so flag it.
-        let rawDataUrl;
-        if (swapData.note) {
-            console.warn('Face swap skipped:', swapData.note);
-            const tplB64 = await blobToBase64(templateBlob);
-            rawDataUrl = tplB64;
-        } else {
-            rawDataUrl = `data:${swapData.mimeType};base64,${swapData.generatedImage}`;
+        // Stage 2 — face-swap the visitor's real face onto the generated scene to
+        // lock identity exactly. Skipped in mock mode (genData.note). If the swap
+        // fails we still show the generated image — the booth never breaks.
+        let imageB64 = genData.generatedImage;
+        let imageMime = genData.mimeType;
+        if (!genData.note) {
+            try {
+                const sceneBlob = base64ToBlob(genData.generatedImage, genData.mimeType);
+                const swapForm = new FormData();
+                swapForm.append('sourceImage', userImg, 'face.jpg');
+                swapForm.append('targetImage', sceneBlob, 'scene.jpg');
+                const swapRes = await fetch('/api/faceswap', { method: 'POST', body: swapForm });
+                const swapData = await swapRes.json();
+                if (swapRes.ok && swapData.success && swapData.generatedImage && !swapData.note) {
+                    imageB64 = swapData.generatedImage;
+                    imageMime = swapData.mimeType;
+                } else {
+                    console.warn('Face swap skipped:', swapData.note || swapData.details || swapData.error);
+                }
+            } catch (swapErr) {
+                console.warn('Face swap failed, using generated image as-is:', swapErr);
+            }
         }
+
+        const rawDataUrl = `data:${imageMime};base64,${imageB64}`;
         let finalDataUrl;
         try {
             finalDataUrl = await brandifyImage(rawDataUrl, state.selectedPreset.name);
@@ -688,7 +659,7 @@ async function generate() {
         el.loadingState.hidden = true;
         el.resultPanel.hidden = false;
 
-        if (swapData.note) toast('Face swap is not configured — showing the sample look.', 'error', 6000);
+        if (genData.note) toast(genData.note, 'error', 6000);
         else toast('Your photo is ready!', 'success');
     } catch (err) {
         console.error(err);
@@ -754,13 +725,11 @@ function resetAll() {
     state.faceBlob = state.faceUrl = state.bodyBlob = state.bodyUrl = null;
     state.selectedPreset = null;
     state.selectedGender = null;
-    state.selectedBuild = 'average';
     el.presetsGrid.querySelectorAll('.destination-card').forEach(c => {
         c.classList.remove('is-selected');
         c.setAttribute('aria-checked', 'false');
     });
     el.genderRadios.forEach(r => { r.checked = false; });
-    el.buildRadios.forEach(r => { r.checked = false; });
     el.selectedDestName.textContent = 'Nothing yet';
     el.generateBtn.disabled = true;
     setCapturePhase('face');
@@ -797,7 +766,6 @@ function wireEvents() {
     });
 
     el.genderRadios.forEach(r => r.addEventListener('change', handleGenderChange));
-    el.buildRadios.forEach(r => r.addEventListener('change', e => setBuild(e.target.value)));
 
     el.generateBtn.addEventListener('click', generate);
 
