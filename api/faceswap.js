@@ -86,8 +86,9 @@ async function downloadAsBuffer(url) {
 //
 // 2. sczhou/codeformer: inswapper works at 128px internally, so the swapped
 //    face is identity-accurate but soft. CodeFormer re-sharpens just the
-//    face. fidelity 0.7 biases toward keeping the swapped identity over
-//    "beautifying"; background_enhance stays off so the scene isn't
+//    face. fidelity 0.9 biases hard toward keeping the swapped identity over
+//    "beautifying" (validated to stay natural, not plastic);
+//    background_enhance stays off so the scene isn't
 //    re-rendered; upscale 1 keeps the 2K output size (and the latency down).
 //
 // CodeFormer failing is not fatal — we return the soft-but-correct swap.
@@ -140,7 +141,7 @@ module.exports = async function handler(req, res) {
             const restoreOutput = await replicate.run(RESTORE_MODEL, {
                 input: {
                     image: swapUrl,
-                    codeformer_fidelity: 0.7,
+                    codeformer_fidelity: 0.9,
                     face_upsample: true,
                     background_enhance: false,
                     upscale: 1,

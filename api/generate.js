@@ -149,20 +149,23 @@ const PRESETS = {
 
 function buildPrompt(preset, gender) {
     const outfit = gender === "female" ? preset.female : preset.male;
-    return `ABSOLUTE RULE — NEVER add Hindu marital-status symbols. The output image must NEVER show any of the following on the person, under any circumstances:
-  • sindoor / vermilion (any red or orange powder, streak or dot in the hair parting)
-  • mangalsutra (the black-bead-and-gold marriage necklace)
-  • kumkum at the hair parting or on the forehead
-  • bridal makeup, heavy nath / nose ring, or any other suhaag / saubhagya marriage symbol
-This is a hard, non-negotiable prohibition. Do NOT add, invent, paint on, or imply any of these — regardless of what the outfit description below suggests, regardless of the cultural or historical setting, regardless of what is "traditional" for the era or region, and regardless of the person's apparent age, gender or marital status. The hair parting must stay clean with no colour in it, and the neck must carry no marriage necklace. This applies even if the reference photo seems to show one — never reproduce or emphasise it. Adding these symbols to anyone who does not actively choose to wear them causes serious religious and cultural offence and is a critical failure of this task. When styling jewellery and accessories, choose ONLY decorative, non-marital pieces. When in doubt, OMIT.
+    return `Create ONE photorealistic portrait by combining the two reference images.
 
-face-preservation rule: the face in the first reference photo must be preserved exactly in the output. same eyes, same nose, same mouth, same jawline, same skin tone, same age, same expression — every facial detail must be identical to the reference. do not beautify, smooth, slim, stylise, de-age, lighten or reshape the face in any way. if the face does not match the reference exactly, the image is wrong.
+IMAGE 1 = THE PERSON (the subject). IMAGE 2 = THE LOCATION (a real heritage site, used as the background and for accurate scene lighting).
 
-age-appropriateness rule: study the apparent age in the reference photo and adapt the outfit accordingly. if the reference shows a child, young girl or teenager, keep the attire age-appropriate — simpler, lighter jewellery; no nath / nose ring; no heavy bridal ornaments; no adult makeup; absolutely no sindoor, mangalsutra or kumkum. treat the outfit description below as a stylistic direction, not a literal checklist — drop any element that is not appropriate for the person's apparent age. a small plain decorative bindi is acceptable only if the person clearly appears to be an adult woman; otherwise omit it.
+TASK: Show the exact person from Image 1 on location at ${preset.setting}, dressed as a ${outfit}. The result must look like a genuine photograph of that same individual taken at that place.
 
-framing rule: compose the shot from roughly the knees up (a three-quarter / medium portrait), with the person facing the camera fairly front-on and the head and face rendered large, sharp and clearly visible — never a tiny distant full-body figure. the face must occupy a generous portion of the frame so every feature is crisp.
+1. IDENTITY — HIGHEST PRIORITY. Reproduce the person's face from Image 1 exactly: the same eyes, eyebrows, nose, mouth, lips, jawline, face shape, cheekbones, skin tone, complexion, hairline, apparent age and natural expression. This must be unmistakably the SAME person — a viewer who knows them should recognise them instantly. Do NOT beautify, smooth, slim, sharpen the jaw, enlarge the eyes, de-age, lighten the skin, or restyle the face in any way. Preserve their real body type and build. If the face is even slightly a different person, the image has failed.
 
-now create an image of this person standing in this ${preset.setting}, dressed like a ${outfit}. please adjust the lights and shadows so the person blends naturally into the scene. the image should look super realistic and natural.`;
+2. FRAMING. A three-quarter, knees-up medium portrait. The person faces the camera close to front-on, with the head and face rendered LARGE, sharp, in focus and well-lit — occupying a generous, clearly readable portion of the frame. Never a small or distant full-body figure; never crop at the neck or chin.
+
+3. WARDROBE. Replace only the clothing with the period attire described above, fitted naturally to the person's body and pose, historically grounded and tasteful. Do not let the wardrobe change the face or body.
+
+4. ABSOLUTE PROHIBITION — never add any Hindu marital-status symbol to anyone, under any circumstances: no sindoor / vermilion (red or orange powder, streak or dot) in the hair parting, no kumkum dot implying marriage, no mangalsutra (black-bead-and-gold marriage necklace), no bridal makeup, no heavy nath / nose ring, no other suhaag or saubhagya marriage marker. The hair parting stays clean with no colour; the neck carries no marriage necklace. This holds regardless of the era, region, tradition, the outfit description, or the person's apparent age or gender — and even if Image 1 appears to show one, do not reproduce it. Use ONLY decorative, non-marital jewellery; when in doubt, omit it. Adding these symbols causes serious cultural and religious offence and is a critical failure.
+
+5. AGE-APPROPRIATE. Match the person's apparent age in Image 1. If they appear to be a child or teenager, keep the styling simple and light — no nose ring, no heavy ornaments, no adult makeup, no bindi — and drop any wardrobe element that is not suitable for their age. A small plain decorative bindi is acceptable only for an adult woman; otherwise omit it.
+
+6. INTEGRATION. Match the lighting direction, colour temperature, shadows, perspective and depth of the location in Image 2 so the person sits naturally in the scene. Professional, realistic photography with natural skin texture — not plastic, waxy or over-retouched.`;
 }
 
 async function fetchBackgroundBuffer(req, filename) {
@@ -210,13 +213,14 @@ module.exports = async function handler(req, res) {
 
         const background = await fetchBackgroundBuffer(req, preset.bg);
 
-        // GPT Image 2 (images/edits). The visitor's photo is passed FIRST so
-        // input_fidelity:"high" anchors on THEIR likeness, then the heritage
-        // background is the second reference for the scene. The model restyles
-        // them into period attire while keeping their face/body recognisable.
-        // A deterministic inswapper face-swap still runs afterwards (client →
-        // /api/faceswap) to lock the exact identity — GPT Image 2 gives the
-        // believable, likeness-aware base; the swap removes all remaining drift.
+        // GPT Image 2 (images/edits). The visitor's photo is passed FIRST so the
+        // model anchors on THEIR likeness, then the heritage background is the
+        // second reference for the scene. The model restyles them into period
+        // attire while keeping their face/body recognisable. (gpt-image-2 has no
+        // input_fidelity knob — it handles identity natively.) A deterministic
+        // inswapper face-swap still runs afterwards (client → /api/faceswap) to
+        // lock the exact identity: GPT Image 2 gives the believable, likeness-
+        // aware base; the swap removes all remaining drift.
         const openai = new OpenAI({ apiKey: openaiKey });
         const userFile = await toFile(
             userImage.buffer,
@@ -234,8 +238,8 @@ module.exports = async function handler(req, res) {
             image: [userFile, bgFile],
             prompt,
             size: "1024x1536",      // portrait, closest GPT-Image size to the 3:4 layout
-            quality: "high",
-            input_fidelity: "high", // keep the visitor's face/body from image #1
+            quality: "medium",      // ~71s, ~₹6/photo; the face-swap finisher locks
+                                    // identity so high's extra detail/latency isn't worth 3x
         });
 
         const b64 = result?.data?.[0]?.b64_json;
@@ -263,3 +267,8 @@ module.exports.config = {
         bodyParser: false,
     },
 };
+
+// Exported for the offline test harness (scripts/test_gptimage_generate.js)
+// so it exercises the EXACT production prompt and presets — no drift.
+module.exports.buildPrompt = buildPrompt;
+module.exports.PRESETS = PRESETS;
