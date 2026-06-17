@@ -628,18 +628,26 @@ async function generate() {
     startLoadingHints();
 
     try {
-        const userImg = await compressImage(state.faceBlob, 0.95, 2048);
-        const bodyImg = state.bodyBlob ? await compressImage(state.bodyBlob, 0.9, 1536) : null;
+        // Compress and encode both shots as data URLs. We send JSON (not
+        // multipart) because Vercel mangles multipart bodies → "Unexpected end
+        // of form". Sizes kept modest so two base64 images fit the body limit.
+        const userImg = await compressImage(state.faceBlob, 0.92, 1600);
+        const bodyImg = state.bodyBlob ? await compressImage(state.bodyBlob, 0.85, 1024) : null;
+        const userImageDataUrl = await blobToBase64(userImg);
+        const bodyImageDataUrl = bodyImg ? await blobToBase64(bodyImg) : null;
 
         // Stage 1 — GPT Image 2 generates the scene from the face (Image 1),
         // the full-body shot (Image 2 → body type), and the heritage background.
-        const genForm = new FormData();
-        genForm.append('userImage', userImg, 'face.jpg');
-        if (bodyImg) genForm.append('bodyImage', bodyImg, 'body.jpg');
-        genForm.append('presetId', String(state.selectedPreset.id));
-        genForm.append('gender', state.selectedGender);
-
-        const genRes = await fetch('/api/generate', { method: 'POST', body: genForm });
+        const genRes = await fetch('/api/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                userImage: userImageDataUrl,
+                bodyImage: bodyImageDataUrl,
+                presetId: String(state.selectedPreset.id),
+                gender: state.selectedGender,
+            }),
+        });
         const genData = await genRes.json();
         if (!genRes.ok || !genData.success) {
             throw new Error(genData.details || genData.error || 'Generation failed');
@@ -652,11 +660,15 @@ async function generate() {
         let imageMime = genData.mimeType;
         if (!genData.note) {
             try {
-                const sceneBlob = base64ToBlob(genData.generatedImage, genData.mimeType);
-                const swapForm = new FormData();
-                swapForm.append('sourceImage', userImg, 'face.jpg');
-                swapForm.append('targetImage', sceneBlob, 'scene.jpg');
-                const swapRes = await fetch('/api/faceswap', { method: 'POST', body: swapForm });
+                const sceneDataUrl = `data:${genData.mimeType};base64,${genData.generatedImage}`;
+                const swapRes = await fetch('/api/faceswap', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        sourceImage: userImageDataUrl,
+                        targetImage: sceneDataUrl,
+                    }),
+                });
                 const swapData = await swapRes.json();
                 if (swapRes.ok && swapData.success && swapData.generatedImage && !swapData.note) {
                     imageB64 = swapData.generatedImage;

@@ -1,58 +1,23 @@
 const Replicate = require("replicate");
-const Busboy = require("busboy");
 
-const MAX_FILE_BYTES = 30 * 1024 * 1024;
-
-async function readRequestBody(req) {
-    if (Buffer.isBuffer(req.body)) return req.body;
-    if (typeof req.body === "string") return Buffer.from(req.body);
+// JSON body: { sourceImage, targetImage } where both are data URLs. We avoid
+// multipart/form-data because Vercel drains the request stream before the
+// handler runs, which surfaces as "Unexpected end of form". With bodyParser
+// off we drain the raw stream ourselves and JSON.parse it.
+async function readJsonBody(req) {
+    if (req.body && typeof req.body === "object") return req.body;
+    if (typeof req.body === "string") return JSON.parse(req.body);
     const chunks = [];
     for await (const chunk of req) {
         chunks.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
     }
-    return Buffer.concat(chunks);
+    const raw = Buffer.concat(chunks).toString("utf8");
+    return raw ? JSON.parse(raw) : {};
 }
 
-function parseMultipart(req) {
-    return new Promise(async (resolve, reject) => {
-        try {
-            const bodyBuffer = await readRequestBody(req);
-            const bb = Busboy({
-                headers: req.headers,
-                limits: { fileSize: MAX_FILE_BYTES, files: 4, fields: 20 },
-            });
-            const fields = {};
-            const files = {};
-            let fileTooLarge = false;
-
-            bb.on("field", (name, val) => { fields[name] = val; });
-            bb.on("file", (name, file, info) => {
-                const chunks = [];
-                file.on("data", c => chunks.push(c));
-                file.on("limit", () => { fileTooLarge = true; });
-                file.on("end", () => {
-                    files[name] = {
-                        fieldname: name,
-                        buffer: Buffer.concat(chunks),
-                        mimetype: info.mimeType,
-                        originalname: info.filename,
-                    };
-                });
-            });
-            bb.on("error", reject);
-            bb.on("close", () => {
-                if (fileTooLarge) return reject(new Error("File too large (max 30MB)"));
-                resolve({ fields, files });
-            });
-            bb.end(bodyBuffer);
-        } catch (err) {
-            reject(err);
-        }
-    });
-}
-
-function bufferToDataUrl(buffer, mimeType) {
-    return `data:${mimeType || "image/jpeg"};base64,${buffer.toString("base64")}`;
+// A data URL is already in the form Replicate accepts; just validate it.
+function isDataUrl(s) {
+    return typeof s === "string" && /^data:[^;,]*;base64,/.test(s);
 }
 
 // Replicate SDK returns URL string | URL[] | FileOutput stream | object with .url().
@@ -101,22 +66,23 @@ module.exports = async function handler(req, res) {
     }
 
     try {
-        const { files } = await parseMultipart(req);
-        const sourceImage = files["sourceImage"]; // webcam face
-        const targetImage = files["targetImage"]; // Gemini scene
+        const body = await readJsonBody(req);
+        const sourceImage = body.sourceImage; // webcam face (data URL)
+        const targetImage = body.targetImage; // generated scene (data URL)
 
-        if (!sourceImage || !targetImage) {
+        if (!isDataUrl(sourceImage) || !isDataUrl(targetImage)) {
             return res.status(400).json({
-                error: "Both sourceImage (face) and targetImage (scene) are required",
+                error: "Both sourceImage (face) and targetImage (scene) are required as data URLs",
             });
         }
 
         const token = process.env.REPLICATE_API_TOKEN;
         if (!token) {
+            const m = /^data:([^;,]+);base64,([\s\S]*)$/.exec(targetImage);
             return res.json({
                 success: true,
-                generatedImage: targetImage.buffer.toString("base64"),
-                mimeType: targetImage.mimetype || "image/png",
+                generatedImage: m ? m[2] : "",
+                mimeType: m ? m[1] : "image/jpeg",
                 note: "REPLICATE_API_TOKEN not configured — returning scene unchanged.",
             });
         }
@@ -126,8 +92,8 @@ module.exports = async function handler(req, res) {
         console.log("Face swap (inswapper)...");
         const swapOutput = await replicate.run(SWAP_MODEL, {
             input: {
-                swap_image: bufferToDataUrl(sourceImage.buffer, sourceImage.mimetype),
-                input_image: bufferToDataUrl(targetImage.buffer, targetImage.mimetype),
+                swap_image: sourceImage,   // already a data URL
+                input_image: targetImage,  // already a data URL
             },
         });
 

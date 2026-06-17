@@ -1,68 +1,30 @@
 const OpenAI = require("openai");
 const { toFile } = require("openai");
-const Busboy = require("busboy");
 const { admin, getDb } = require("../lib/firebase");
 
-const MAX_FILE_BYTES = 30 * 1024 * 1024;
-
-// Robust multipart parser for Vercel's Node runtime.
+// The client sends a JSON body: { userImage, bodyImage, presetId, gender }
+// where userImage (face) and bodyImage (full body) are data URLs.
 //
-// Vercel sometimes pre-buffers req.body into a Buffer (or even a string),
-// and sometimes leaves it as a stream — depending on runtime version,
-// region, and bodyParser config. Multer assumes a stream and throws
-// "Unexpected end of form" the moment it sees anything else. To make this
-// bulletproof we ALWAYS drain to a Buffer first, then hand it to busboy
-// (the underlying parser multer wraps) ourselves.
-async function readRequestBody(req) {
-    if (Buffer.isBuffer(req.body)) return req.body;
-    if (typeof req.body === "string") return Buffer.from(req.body);
+// We deliberately AVOID multipart/form-data: Vercel's dev/runtime drains the
+// request stream before the handler runs without populating req.body for
+// multipart, which surfaces as "Unexpected end of form". JSON is reliable —
+// with bodyParser:false we drain the raw stream ourselves and JSON.parse it.
+async function readJsonBody(req) {
+    if (req.body && typeof req.body === "object") return req.body;
+    if (typeof req.body === "string") return JSON.parse(req.body);
     const chunks = [];
     for await (const chunk of req) {
         chunks.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
     }
-    return Buffer.concat(chunks);
+    const raw = Buffer.concat(chunks).toString("utf8");
+    return raw ? JSON.parse(raw) : {};
 }
 
-function parseMultipart(req) {
-    return new Promise(async (resolve, reject) => {
-        try {
-            const bodyBuffer = await readRequestBody(req);
-            const bb = Busboy({
-                headers: req.headers,
-                limits: { fileSize: MAX_FILE_BYTES, files: 4, fields: 20 },
-            });
-
-            const fields = {};
-            const files = {};
-            let fileTooLarge = false;
-
-            bb.on("field", (name, val) => { fields[name] = val; });
-
-            bb.on("file", (name, file, info) => {
-                const chunks = [];
-                file.on("data", c => chunks.push(c));
-                file.on("limit", () => { fileTooLarge = true; });
-                file.on("end", () => {
-                    files[name] = {
-                        fieldname: name,
-                        buffer: Buffer.concat(chunks),
-                        mimetype: info.mimeType,
-                        originalname: info.filename,
-                    };
-                });
-            });
-
-            bb.on("error", reject);
-            bb.on("close", () => {
-                if (fileTooLarge) return reject(new Error("File too large (max 30MB)"));
-                resolve({ fields, files });
-            });
-
-            bb.end(bodyBuffer);
-        } catch (err) {
-            reject(err);
-        }
-    });
+// Split a data URL ("data:image/jpeg;base64,XXXX") into { mimeType, buffer }.
+function parseDataUrl(dataUrl) {
+    const m = /^data:([^;,]+)?(?:;base64)?,([\s\S]*)$/.exec(dataUrl || "");
+    if (!m || !m[2]) return null;
+    return { mimeType: m[1] || "image/jpeg", buffer: Buffer.from(m[2], "base64") };
 }
 
 // Per-preset data: background filename, a setting noun, and gender-keyed
@@ -194,10 +156,10 @@ module.exports = async function handler(req, res) {
     }
 
     try {
-        const { fields, files } = await parseMultipart(req);
-        const { presetId, gender } = fields;
-        const userImage = files["userImage"]; // face close-up (Image 1)
-        const bodyImage = files["bodyImage"]; // full-body shot (Image 2) — optional
+        const body = await readJsonBody(req);
+        const { presetId, gender } = body;
+        const userImage = parseDataUrl(body.userImage); // face close-up (Image 1) → {mimeType, buffer}
+        const bodyImage = parseDataUrl(body.bodyImage); // full-body shot (Image 2) — optional
 
         if (!userImage)         return res.status(400).json({ error: "User image is required" });
         if (!presetId)          return res.status(400).json({ error: "presetId is required" });
@@ -213,7 +175,7 @@ module.exports = async function handler(req, res) {
             return res.json({
                 success: true,
                 generatedImage: userImage.buffer.toString("base64"),
-                mimeType: userImage.mimetype,
+                mimeType: userImage.mimeType,
                 note: "Set OPENAI_API_KEY in Vercel env to enable generation.",
             });
         }
@@ -235,8 +197,8 @@ module.exports = async function handler(req, res) {
         const openai = new OpenAI({ apiKey: openaiKey });
         const userFile = await toFile(
             userImage.buffer,
-            userImage.originalname || "face.png",
-            { type: userImage.mimetype || "image/png" },
+            "face.png",
+            { type: userImage.mimeType || "image/png" },
         );
         const bgFile = await toFile(
             background.buffer,
@@ -248,8 +210,8 @@ module.exports = async function handler(req, res) {
         if (bodyImage) {
             inputImages.push(await toFile(
                 bodyImage.buffer,
-                bodyImage.originalname || "body.jpg",
-                { type: bodyImage.mimetype || "image/jpeg" },
+                "body.jpg",
+                { type: bodyImage.mimeType || "image/jpeg" },
             ));
         }
         inputImages.push(bgFile);
