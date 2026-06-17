@@ -185,6 +185,46 @@
         color: var(--muted);
         font-size: 0.92rem;
     }
+    .date-filter {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: wrap;
+        margin-bottom: 20px;
+        padding: 14px 16px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+    }
+    .date-filter label {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 0.92rem;
+        color: var(--ink);
+    }
+    .date-filter input[type=date] {
+        padding: 6px 8px;
+        font: inherit;
+        font-size: 0.92rem;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: #fff;
+    }
+    .date-filter .muted {
+        margin-left: auto;
+        font-size: 0.88rem;
+    }
+    .stats-heading {
+        margin: 28px 0 12px;
+        font-size: 1.02rem;
+        font-weight: 600;
+        color: var(--ink);
+    }
+    .stats-heading .muted {
+        font-weight: 400;
+        font-size: 0.9rem;
+    }
     .thumb {
         width: 60px;
         height: 80px;
@@ -272,10 +312,17 @@
         </section>
 
         <section class="tab-pane" id="tab-stats" role="tabpanel" aria-labelledby="tabBtnStats" hidden>
+            <div class="date-filter">
+                <label>From <input type="date" id="dateFrom" /></label>
+                <label>To <input type="date" id="dateTo" /></label>
+                <button id="applyDateFilter" class="ghost">Apply</button>
+                <button id="clearDateFilter" class="ghost">Clear</button>
+                <span class="muted" id="dateFilterStatus">All time</span>
+            </div>
             <div class="stats-cards">
                 <div class="stat-card">
                     <div class="stat-card__value" id="statsTotalPhotos">—</div>
-                    <div class="stat-card__label">Total photos generated</div>
+                    <div class="stat-card__label" id="statsTotalLabel">Total photos generated</div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-card__value" id="statsBgCount">—</div>
@@ -283,7 +330,10 @@
                 </div>
             </div>
             <p id="statsLoadErr" class="err" hidden></p>
+            <h3 class="stats-heading">Per-background breakdown</h3>
             <div id="statsTableWrap"></div>
+            <h3 class="stats-heading" id="eventsHeading" hidden>Individual generations <span class="muted" id="eventsCount"></span></h3>
+            <div id="eventsTableWrap"></div>
         </section>
     </div>
 </main>
@@ -460,9 +510,13 @@ function downloadCsv() {
 
 // ── Stats / MIS tab ────────────────────────────────────────────────
 
-async function loadStats(pw) {
+async function loadStats(pw, from, to) {
     $('statsLoadErr').hidden = true;
-    const res = await fetch('/api/stats', { headers: { 'x-admin-password': pw } });
+    const qs = new URLSearchParams();
+    if (from) qs.set('from', from);
+    if (to)   qs.set('to', to);
+    const url = '/api/stats' + (qs.toString() ? '?' + qs.toString() : '');
+    const res = await fetch(url, { headers: { 'x-admin-password': pw } });
     if (res.status === 401) throw new Error('Wrong password.');
     if (!res.ok) {
         let detail = '';
@@ -474,56 +528,117 @@ async function loadStats(pw) {
 
 function renderStats(data) {
     currentStats = data;
+    const isFiltered = !!(data.filter && (data.filter.from || data.filter.to));
+
+    // Cards + status line
     $('statsTotalPhotos').textContent = Number(data.total || 0).toLocaleString();
     $('statsBgCount').textContent = (data.backgrounds || []).length.toLocaleString();
-    if (!data.backgrounds || data.backgrounds.length === 0) {
-        $('statsTableWrap').innerHTML = '<div class="empty">No photo generations yet.</div>';
-        return;
+    $('statsTotalLabel').textContent = isFiltered ? 'Photos in selected range' : 'Total photos generated';
+    if (isFiltered) {
+        const from = data.filter.from || '…';
+        const to   = data.filter.to   || '…';
+        $('dateFilterStatus').textContent = `Showing ${from} → ${to}${data.truncated ? ' (capped at 1000 events)' : ''}`;
+    } else {
+        $('dateFilterStatus').textContent = 'All time';
     }
-    const rows = data.backgrounds.map((b, i) => `
-        <tr>
-            <td class="muted">${i + 1}</td>
-            <td><code>${esc(b.filename)}</code></td>
-            <td><strong>${Number(b.count || 0).toLocaleString()}</strong></td>
-            <td class="muted">${esc(fmtDate(b.lastUsedAt))}</td>
-        </tr>
-    `).join('');
-    $('statsTableWrap').innerHTML = `
-        <table>
-            <thead>
-                <tr>
-                    <th style="width:40px">#</th>
-                    <th>Background file</th>
-                    <th>Photos generated</th>
-                    <th>Last used</th>
-                </tr>
-            </thead>
-            <tbody>${rows}</tbody>
-        </table>`;
+
+    // Per-background table
+    if (!data.backgrounds || data.backgrounds.length === 0) {
+        $('statsTableWrap').innerHTML = '<div class="empty">No photo generations' + (isFiltered ? ' in this range.' : ' yet.') + '</div>';
+    } else {
+        const rows = data.backgrounds.map((b, i) => `
+            <tr>
+                <td class="muted">${i + 1}</td>
+                <td><code>${esc(b.filename)}</code></td>
+                <td><strong>${Number(b.count || 0).toLocaleString()}</strong></td>
+                <td class="muted">${esc(fmtDate(b.lastUsedAt))}</td>
+            </tr>
+        `).join('');
+        $('statsTableWrap').innerHTML = `
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width:40px">#</th>
+                        <th>Background file</th>
+                        <th>Photos generated</th>
+                        <th>Last used</th>
+                    </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+            </table>`;
+    }
+
+    // Individual events table (only available when a date filter is active)
+    if (data.events && data.events.length > 0) {
+        $('eventsHeading').hidden = false;
+        $('eventsCount').textContent = `(${data.events.length} event${data.events.length === 1 ? '' : 's'})`;
+        const evRows = data.events.map((e) => `
+            <tr>
+                <td class="muted">${esc(fmtDate(e.createdAt))}</td>
+                <td><code>${esc(e.backgroundFilename)}</code></td>
+                <td>${esc(e.gender || '—')}</td>
+            </tr>
+        `).join('');
+        $('eventsTableWrap').innerHTML = `
+            <table>
+                <thead>
+                    <tr>
+                        <th>Date / time</th>
+                        <th>Background file</th>
+                        <th>Gender</th>
+                    </tr>
+                </thead>
+                <tbody>${evRows}</tbody>
+            </table>`;
+    } else if (isFiltered) {
+        $('eventsHeading').hidden = false;
+        $('eventsCount').textContent = '(0)';
+        $('eventsTableWrap').innerHTML = '<div class="empty">No generations in this range.</div>';
+    } else {
+        // No filter — events list intentionally empty; hide the heading.
+        $('eventsHeading').hidden = true;
+        $('eventsTableWrap').innerHTML = '';
+    }
 }
 
 function downloadStatsCsv() {
     if (!currentStats) return;
-    const headers = ['Rank', 'Background file', 'Photos generated', 'Last used'];
-    const rows = (currentStats.backgrounds || []).map((b, i) => [
-        i + 1,
-        b.filename || '',
-        b.count || 0,
-        fmtDate(b.lastUsedAt),
-    ].map(csvCell).join(','));
-    const totalRow = [csvCell(''), csvCell('TOTAL'), csvCell(currentStats.total || 0), csvCell('')].join(',');
-    const csv = '﻿' + [
-        headers.map(csvCell).join(','),
-        ...rows,
-        '',
-        totalRow,
-    ].join('\r\n');
+    const isFiltered = !!(currentStats.filter && (currentStats.filter.from || currentStats.filter.to));
+    const lines = [];
+
+    // Header block describing what's in this export
+    if (isFiltered) {
+        lines.push(csvCell('Date range') + ',' + csvCell(`${currentStats.filter.from || '...'}  to  ${currentStats.filter.to || '...'}`));
+        lines.push('');
+    }
+
+    // Per-background breakdown
+    lines.push(['Rank', 'Background file', 'Photos generated', 'Last used'].map(csvCell).join(','));
+    (currentStats.backgrounds || []).forEach((b, i) => {
+        lines.push([i + 1, b.filename || '', b.count || 0, fmtDate(b.lastUsedAt)].map(csvCell).join(','));
+    });
+    lines.push([csvCell(''), csvCell('TOTAL'), csvCell(currentStats.total || 0), csvCell('')].join(','));
+
+    // Individual events (only present when a date filter is active)
+    if (currentStats.events && currentStats.events.length > 0) {
+        lines.push('');
+        lines.push(csvCell('Individual generations'));
+        lines.push(['Date / time', 'Background file', 'Gender'].map(csvCell).join(','));
+        currentStats.events.forEach((e) => {
+            lines.push([fmtDate(e.createdAt), e.backgroundFilename || '', e.gender || ''].map(csvCell).join(','));
+        });
+    }
+
+    const csv = '﻿' + lines.join('\r\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     const today = new Date().toISOString().slice(0, 10);
+    const suffix = isFiltered
+        ? `-${currentStats.filter.from || 'start'}_to_${currentStats.filter.to || 'end'}`
+        : '';
     a.href = url;
-    a.download = `ai-photobooth-stats-${today}.csv`;
+    a.download = `ai-photobooth-stats-${today}${suffix}.csv`;
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -552,16 +667,42 @@ async function switchTab(name) {
         if (!currentStats) {
             const pw = sessionStorage.getItem(PASS_KEY);
             if (pw) {
-                try { renderStats(await loadStats(pw)); }
+                try { renderStats(await loadStats(pw, $('dateFrom').value, $('dateTo').value)); }
                 catch (err) { $('statsLoadErr').textContent = err.message; $('statsLoadErr').hidden = false; }
             }
         }
         const total = currentStats ? currentStats.total : 0;
-        $('countLabel').textContent = `${Number(total).toLocaleString()} photo${total === 1 ? '' : 's'} generated`;
+        const isFiltered = !!(currentStats && currentStats.filter && (currentStats.filter.from || currentStats.filter.to));
+        $('countLabel').textContent = `${Number(total).toLocaleString()} photo${total === 1 ? '' : 's'}` + (isFiltered ? ' in range' : ' generated');
         $('downloadCsvBtn').disabled = !currentStats || (currentStats.backgrounds || []).length === 0;
         $('downloadCsvBtn').title = 'Download per-background generation stats as a CSV file (opens in Excel)';
     }
 }
+
+// Date filter — Apply, Clear, and Enter key
+async function applyDateFilter() {
+    const pw = sessionStorage.getItem(PASS_KEY);
+    if (!pw) return;
+    try {
+        renderStats(await loadStats(pw, $('dateFrom').value, $('dateTo').value));
+        $('countLabel').textContent = `${Number(currentStats.total || 0).toLocaleString()} photo${currentStats.total === 1 ? '' : 's'} in range`;
+    } catch (err) {
+        $('statsLoadErr').textContent = err.message;
+        $('statsLoadErr').hidden = false;
+    }
+}
+async function clearDateFilter() {
+    $('dateFrom').value = '';
+    $('dateTo').value = '';
+    const pw = sessionStorage.getItem(PASS_KEY);
+    if (!pw) return;
+    try { renderStats(await loadStats(pw)); }
+    catch (err) { $('statsLoadErr').textContent = err.message; $('statsLoadErr').hidden = false; }
+}
+$('applyDateFilter').addEventListener('click', applyDateFilter);
+$('clearDateFilter').addEventListener('click', clearDateFilter);
+$('dateFrom').addEventListener('keydown', (e) => { if (e.key === 'Enter') applyDateFilter(); });
+$('dateTo').addEventListener('keydown',   (e) => { if (e.key === 'Enter') applyDateFilter(); });
 
 document.querySelectorAll('.tab').forEach((t) => {
     t.addEventListener('click', () => switchTab(t.dataset.tab));
@@ -579,7 +720,7 @@ $('refreshBtn').addEventListener('click', async () => {
         try { render((await loadFeedback(pw)).items || []); }
         catch (err) { $('loadErr').textContent = err.message; $('loadErr').hidden = false; }
     } else {
-        try { renderStats(await loadStats(pw)); }
+        try { renderStats(await loadStats(pw, $('dateFrom').value, $('dateTo').value)); }
         catch (err) { $('statsLoadErr').textContent = err.message; $('statsLoadErr').hidden = false; }
     }
 });

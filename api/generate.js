@@ -198,16 +198,26 @@ module.exports = async function handler(req, res) {
             throw new Error(`No image in response. ${textPart?.text || ""}`.trim());
         }
 
-        // Best-effort: tick the usage counter for this background. A failure
-        // here must not block returning the generated image to the user.
+        // Best-effort: tick the usage counter for this background AND log an
+        // individual generation event for the MIS view. A failure here must
+        // not block returning the generated image to the user.
         try {
-            await getDb().collection("usage").doc(preset.bg).set({
-                filename:   preset.bg,
-                count:      admin.firestore.FieldValue.increment(1),
-                lastUsedAt: admin.firestore.FieldValue.serverTimestamp(),
-            }, { merge: true });
+            const db = getDb();
+            await Promise.all([
+                db.collection("usage").doc(preset.bg).set({
+                    filename:   preset.bg,
+                    count:      admin.firestore.FieldValue.increment(1),
+                    lastUsedAt: admin.firestore.FieldValue.serverTimestamp(),
+                }, { merge: true }),
+                db.collection("generations").add({
+                    backgroundFilename: preset.bg,
+                    presetId:           Number(presetId),
+                    gender,
+                    createdAt:          admin.firestore.FieldValue.serverTimestamp(),
+                }),
+            ]);
         } catch (counterErr) {
-            console.warn("Usage counter failed:", counterErr.message);
+            console.warn("Usage counter / generation log failed:", counterErr.message);
         }
 
         return res.json({
