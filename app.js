@@ -20,6 +20,8 @@ const state = {
     selectedPreset: null,
     selectedGender: null,
     cameraDevices: [],
+    // { "bhimbetka-rock-shelter.jpg": 12, ... } — populated by /api/usage
+    usageCounts: {},
 };
 
 // The picker sample (1 per preset+gender) — shown so the visitor sees the kind
@@ -83,19 +85,19 @@ const el = {
 // lives server-side in api/generate.js (PRESETS). The client just sends
 // presetId + gender.
 const presets = [
-    { id: 1,  name: 'Khajuraho — Kandariya Mahadev',  description: 'UNESCO-listed Chandela-era sandstone temples',     backgroundUrl: 'assets/backgrounds/Jagdambi Temple , Kandariya Mahadev Temple.jpg' },
-    { id: 2,  name: 'Khajuraho — Lakshmana Temple',   description: 'The finely carved 10th-century Chandela temple',   backgroundUrl: 'assets/backgrounds/Lakshmana Temple IMG_9753-HDR.jpg' },
-    { id: 7,  name: 'Sanchi Stupa',                   description: 'UNESCO Buddhist monument with carved toranas',     backgroundUrl: 'assets/backgrounds/Sanchi Stupa.jpg' },
-    { id: 3,  name: 'Orchha — Jahangir Mahal',        description: '17th-century Bundela palace, arched courtyards',   backgroundUrl: 'assets/backgrounds/Jahangir Mahal 6 - Copy.jpg' },
-    { id: 4,  name: 'Orchha — Jahangir Gate',         description: 'Monumental Bundela-Mughal archway',                backgroundUrl: 'assets/backgrounds/jahangir gate orchha.jpg' },
-    { id: 8,  name: 'Mandu — Jahaz Mahal',            description: 'Ship Palace of the Royal Enclave, monsoon mood',   backgroundUrl: 'assets/backgrounds/Jahaz Mahal Mandu.jpg' },
-    { id: 6,  name: 'Maheshwar — Chhatri by the River', description: 'Holkar cenotaphs above the Narmada ghats',       backgroundUrl: 'assets/backgrounds/Chattei River view (7).jpg' },
-    { id: 9,  name: 'Krishnabai Holkar Chhatri',      description: "The queen's cenotaph above the Narmada, Maheshwar", backgroundUrl: 'assets/backgrounds/Krishnabai holkar chhatri .jpg' },
-    { id: 10, name: 'Indore — Rajwada Palace',        description: 'The seven-storey Holkar palace of Indore',         backgroundUrl: 'assets/backgrounds/Rajwada Indore.jpg' },
-    { id: 11, name: 'Indore — Rajwada Courtyard',     description: 'Inside the Holkar royal seat',                     backgroundUrl: 'assets/backgrounds/RajWada 15.jpg' },
-    { id: 14, name: 'Bandhavgarh — Shesh Shaiya',     description: 'Reclining Vishnu in deep Bandhavgarh jungle',      backgroundUrl: 'assets/backgrounds/Shesh Shaiya Bandhavgarh.jpg' },
-    { id: 12, name: 'Kheoni Sanctuary — Wilds of MP', description: 'Central Indian teak and sal forest',               backgroundUrl: 'assets/backgrounds/kheoni wildlife sanctuary .jpg', genders: ['male'] },
-    { id: 13, name: 'Kheoni Sanctuary — Forest Trail', description: 'Quiet woodland of teak, sal and bamboo',          backgroundUrl: 'assets/backgrounds/kheoni wildlife sanctuary 1.jpg', genders: ['male'] },
+    { id: 1,  name: 'Khajuraho — Kandariya Mahadev',  description: 'UNESCO-listed Chandela-era sandstone temples',     backgroundUrl: 'assets/backgrounds/jagdambi-temple-kandariya-mahadev-temple.jpg' },
+    { id: 2,  name: 'Khajuraho — Lakshmana Temple',   description: 'The finely carved 10th-century Chandela temple',   backgroundUrl: 'assets/backgrounds/lakshmana-temple-img-9753-hdr.jpg' },
+    { id: 7,  name: 'Sanchi Stupa',                   description: 'UNESCO Buddhist monument with carved toranas',     backgroundUrl: 'assets/backgrounds/sanchi-stupa.jpg' },
+    { id: 3,  name: 'Orchha — Jahangir Mahal',        description: '17th-century Bundela palace, arched courtyards',   backgroundUrl: 'assets/backgrounds/jahangir-mahal-6-copy.jpg' },
+    { id: 4,  name: 'Orchha — Jahangir Gate',         description: 'Monumental Bundela-Mughal archway',                backgroundUrl: 'assets/backgrounds/jahangir-gate-orchha.jpg' },
+    { id: 8,  name: 'Mandu — Jahaz Mahal',            description: 'Ship Palace of the Royal Enclave, monsoon mood',   backgroundUrl: 'assets/backgrounds/jahaz-mahal-mandu.jpg' },
+    { id: 6,  name: 'Maheshwar — Chhatri by the River', description: 'Holkar cenotaphs above the Narmada ghats',       backgroundUrl: 'assets/backgrounds/chattei-river-view-7.jpg' },
+    { id: 9,  name: 'Krishnabai Holkar Chhatri',      description: "The queen's cenotaph above the Narmada, Maheshwar", backgroundUrl: 'assets/backgrounds/krishnabai-holkar-chhatri.jpg' },
+    { id: 10, name: 'Indore — Rajwada Palace',        description: 'The seven-storey Holkar palace of Indore',         backgroundUrl: 'assets/backgrounds/rajwada-indore.jpg' },
+    { id: 11, name: 'Indore — Rajwada Courtyard',     description: 'Inside the Holkar royal seat',                     backgroundUrl: 'assets/backgrounds/rajwada-15.jpg' },
+    { id: 14, name: 'Bandhavgarh — Shesh Shaiya',     description: 'Reclining Vishnu in deep Bandhavgarh jungle',      backgroundUrl: 'assets/backgrounds/shesh-shaiya-bandhavgarh.jpg' },
+    { id: 12, name: 'Kheoni Sanctuary — Wilds of MP', description: 'Central Indian teak and sal forest',               backgroundUrl: 'assets/backgrounds/kheoni-wildlife-sanctuary.jpg', genders: ['male'] },
+    { id: 13, name: 'Kheoni Sanctuary — Forest Trail', description: 'Quiet woodland of teak, sal and bamboo',          backgroundUrl: 'assets/backgrounds/kheoni-wildlife-sanctuary-1.jpg', genders: ['male'] },
 ];
 
 // ── Branding overlay ────────────────────────────────────────────
@@ -144,7 +146,22 @@ function init() {
     loadCameraDevices();
     checkHealth();
     preloadBrandLogos();
+    fetchUsageCounts();
     if (el.yearSpan) el.yearSpan.textContent = new Date().getFullYear();
+}
+
+// Pulls the per-background usage counts and re-renders the destinations so
+// the count badge appears on each card. Silent on failure — the counts are
+// a nice-to-have, the app works fine without them.
+async function fetchUsageCounts() {
+    try {
+        const r = await fetch('/api/usage');
+        const data = await r.json();
+        if (data && data.counts) {
+            state.usageCounts = data.counts;
+            renderDestinations();
+        }
+    } catch (_) { /* silent */ }
 }
 
 async function checkHealth() {
@@ -355,10 +372,16 @@ function renderDestinations() {
         // Show a sample of the kind of result this destination produces. Falls
         // back to the raw heritage background if no sample exists yet.
         const sample = sampleUrl(p.id, gender);
+        const filename = (p.backgroundUrl || '').split('/').pop();
+        const count = state.usageCounts[filename] || 0;
         card.innerHTML = `
             <div class="destination-card__media">
                 <img src="${sample}" alt="" loading="lazy"
                      onerror="this.onerror=null;this.src='${p.backgroundUrl}'" />
+                <div class="destination-card__uses" aria-label="Used ${count} times">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5Zm0 12.5a5 5 0 1 1 0-10 5 5 0 0 1 0 10Zm0-8a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z"/></svg>
+                    <span>${count}</span>
+                </div>
             </div>
             <div class="destination-card__check" aria-hidden="true">
                 <svg viewBox="0 0 24 24"><path fill="currentColor" d="m9.55 17.575-4.95-4.95 1.414-1.414 3.536 3.536 7.07-7.071 1.415 1.414-8.485 8.485Z"/></svg>
@@ -769,10 +792,185 @@ function wireEvents() {
 
     el.generateBtn.addEventListener('click', generate);
 
-    el.newPhotoBtn.addEventListener('click', resetAll);
-    el.downloadBtn.addEventListener('click', download);
-    el.shareWhatsAppBtn.addEventListener('click', shareWhatsApp);
-    el.printBtn.addEventListener('click', () => window.print());
+    // "Start over" — if the user hasn't given feedback yet this session,
+    // surface the popup first; resetAll then runs after they close it
+    // (handled inside closeFeedback). Otherwise just reset right away.
+    el.newPhotoBtn.addEventListener('click', () => {
+        if (feedback.submittedThisSession || !feedback.overlay) {
+            resetAll();
+            return;
+        }
+        feedback.resetAfterClose = true;
+        openFeedback();
+    });
+    // The feedback popup surfaces whenever the user takes a post-generation
+    // action (download, share, print) — i.e. they've used the image.
+    el.downloadBtn.addEventListener('click', () => { download(); openFeedback(); });
+    el.shareWhatsAppBtn.addEventListener('click', () => { shareWhatsApp(); openFeedback(); });
+    el.printBtn.addEventListener('click', () => { window.print(); openFeedback(); });
+
+    wireFeedback();
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  Feedback (post-generation star rating, persisted to Firestore)
+// ═══════════════════════════════════════════════════════════════
+
+const feedback = {
+    overlay: null,
+    panel: null,
+    submitBtn: null,
+    skipBtn: null,
+    closeBtn: null,
+    thanks: null,
+    ratings: { rating1: 0, rating2: 0 },
+    submittedThisSession: false,
+    resetAfterClose: false,
+};
+
+// Stable anonymous user id so admin can spot repeat submitters without
+// us collecting any personal data.
+function getAnonId() {
+    try {
+        const k = 'ai-photobooth-anon-id';
+        let id = localStorage.getItem(k);
+        if (!id) {
+            id = (window.crypto && crypto.randomUUID)
+                ? crypto.randomUUID()
+                : 'anon-' + Date.now() + '-' + Math.random().toString(36).slice(2, 10);
+            localStorage.setItem(k, id);
+        }
+        return id;
+    } catch (_) { return null; }
+}
+
+// Downscale a data URL to a small JPEG thumbnail for the feedback record.
+function dataUrlToThumbnail(dataUrl, maxWidth = 600, quality = 0.75) {
+    return new Promise((resolve, reject) => {
+        if (!dataUrl) return resolve(null);
+        const img = new Image();
+        img.onload = () => {
+            const ratio = Math.min(1, maxWidth / img.naturalWidth);
+            const w = Math.round(img.naturalWidth * ratio);
+            const h = Math.round(img.naturalHeight * ratio);
+            const c = document.createElement('canvas');
+            c.width = w; c.height = h;
+            c.getContext('2d').drawImage(img, 0, 0, w, h);
+            resolve(c.toDataURL('image/jpeg', quality));
+        };
+        img.onerror = () => reject(new Error('Image load failed'));
+        img.src = dataUrl;
+    });
+}
+
+function wireFeedback() {
+    feedback.overlay   = $('feedbackOverlay');
+    feedback.panel     = $('feedbackPanel');
+    feedback.submitBtn = $('submitFeedbackBtn');
+    feedback.skipBtn   = $('skipFeedbackBtn');
+    feedback.closeBtn  = $('feedbackCloseBtn');
+    feedback.thanks    = $('feedbackThanks');
+    if (!feedback.panel) return;
+
+    feedback.panel.querySelectorAll('.rating').forEach(group => {
+        const key = group.dataset.rating;
+        group.querySelectorAll('.rating__star').forEach(star => {
+            star.addEventListener('click', () => {
+                const value = Number(star.dataset.value);
+                feedback.ratings[key] = value;
+                group.dataset.value = String(value);
+                updateFeedbackSubmitState();
+            });
+        });
+    });
+
+    feedback.submitBtn.addEventListener('click', submitFeedback);
+    feedback.skipBtn.addEventListener('click', skipFeedback);
+    feedback.closeBtn.addEventListener('click', closeFeedback);
+    feedback.overlay.addEventListener('click', (e) => {
+        if (e.target === feedback.overlay) closeFeedback();
+    });
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !feedback.overlay.hidden) closeFeedback();
+    });
+}
+
+function openFeedback() {
+    if (!feedback.overlay) return;
+    if (feedback.submittedThisSession) return;
+    resetFeedback();
+    feedback.overlay.hidden = false;
+}
+function closeFeedback() {
+    if (!feedback.overlay) return;
+    feedback.overlay.hidden = true;
+    resetFeedback();
+    if (feedback.resetAfterClose) {
+        feedback.resetAfterClose = false;
+        resetAll();
+    }
+}
+function updateFeedbackSubmitState() {
+    feedback.submitBtn.disabled = !(feedback.ratings.rating1 >= 1 && feedback.ratings.rating2 >= 1);
+}
+function resetFeedback() {
+    if (!feedback.panel) return;
+    feedback.ratings.rating1 = 0;
+    feedback.ratings.rating2 = 0;
+    feedback.panel.classList.remove('is-submitted');
+    feedback.panel.querySelectorAll('.rating').forEach(g => g.removeAttribute('data-value'));
+    if (feedback.thanks) {
+        feedback.thanks.hidden = true;
+        feedback.thanks.textContent = 'Thank you for your feedback! ✨';
+    }
+    feedback.submitBtn.disabled = true;
+    feedback.submitBtn.textContent = 'Send feedback';
+}
+function skipFeedback() { closeFeedback(); }
+
+async function submitFeedback() {
+    if (feedback.submitBtn.disabled) return;
+    feedback.submitBtn.disabled = true;
+    feedback.submitBtn.textContent = 'Sending…';
+    try {
+        const bgUrl = state.selectedPreset?.backgroundUrl || '';
+        const backgroundFilename = bgUrl.split('/').pop() || null;
+
+        let imageDataUrl = null;
+        try {
+            imageDataUrl = await dataUrlToThumbnail(el.generatedImage.src, 600, 0.75);
+        } catch (thumbErr) {
+            console.warn('Thumbnail failed:', thumbErr);
+        }
+
+        const payload = {
+            rating1:    feedback.ratings.rating1,
+            rating2:    feedback.ratings.rating2,
+            presetName: state.selectedPreset?.name || null,
+            backgroundFilename,
+            gender:     state.selectedGender || null,
+            anonId:     getAnonId(),
+            imageDataUrl,
+        };
+        const res = await fetch('/api/feedback', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+            throw new Error(data.details || data.error || 'Could not send feedback');
+        }
+        feedback.submittedThisSession = true;
+        feedback.panel.classList.add('is-submitted');
+        feedback.thanks.hidden = false;
+        setTimeout(closeFeedback, 1600);
+    } catch (err) {
+        console.error('Feedback failed:', err);
+        toast(err.message || 'Could not send feedback', 'error', 4000);
+        feedback.submitBtn.disabled = false;
+        feedback.submitBtn.textContent = 'Send feedback';
+    }
 }
 
 // Boot

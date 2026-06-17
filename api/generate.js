@@ -1,6 +1,7 @@
 const OpenAI = require("openai");
 const { toFile } = require("openai");
 const Busboy = require("busboy");
+const { admin, getDb } = require("../lib/firebase");
 
 const MAX_FILE_BYTES = 30 * 1024 * 1024;
 
@@ -72,52 +73,52 @@ function parseMultipart(req) {
 //  10-11 Rajwada palace          → Holkar royal seat, built 1747
 //  12-13 Kheoni Sanctuary        → modern wildlife sanctuary (male-only on client)
 const PRESETS = {
-    1:  { bg: "Jagdambi Temple , Kandariya Mahadev Temple.jpg",
+    1:  { bg: "jagdambi-temple-kandariya-mahadev-temple.jpg",
           setting: "ancient carved sandstone temple at Khajuraho",
           male:   "chandela-era hindu devotee in a traditional white cotton dhoti, a saffron uttariya (shoulder cloth) draped over one shoulder, and a rudraksha mala",
           female: "chandela-era noblewoman in a traditional ivory silk saree with a narrow gold border, classical temple gold jewellery (jhumka earrings, a thin choker and bangles) and a small red bindi" },
 
-    2:  { bg: "Lakshmana Temple IMG_9753-HDR.jpg",
+    2:  { bg: "lakshmana-temple-img-9753-hdr.jpg",
           setting: "10th-century Chandela sandstone temple at Khajuraho",
           male:   "chandela-era nobleman in a cream cotton dhoti and unstitched shoulder cloth, a simple gold armlet and a rudraksha mala around the neck",
           female: "chandela-era noblewoman in a soft mustard silk saree with a gold border, traditional temple gold jewellery and a small red bindi" },
 
-    3:  { bg: "Jahangir Mahal 6 - Copy.jpg",
+    3:  { bg: "jahangir-mahal-6-copy.jpg",
           setting: "17th-century Bundela palace courtyard at Orchha",
           male:   "bundela rajput prince in a brocade cream angarkha, churidar pyjama, a colourful safa (rajput turban) and a kamarband (waist sash), with subtle gold jewellery",
           female: "bundela rajput princess in a deep-red silk lehenga-choli with zari embroidery, a sheer dupatta draped over the head, traditional rajput gold jewellery (maang tikka, jhumkas, choker)" },
 
-    4:  { bg: "jahangir gate orchha.jpg",
+    4:  { bg: "jahangir-gate-orchha.jpg",
           setting: "monumental Mughal-era Bundela gateway at Orchha",
           male:   "bundela rajput warrior in a saffron brocade angarkha, churidar pyjama, a colourful safa turban, a kamarband and a scabbarded sword at the waist",
           female: "bundela rajput princess in a maroon silk lehenga with gold zari work, a sheer dupatta draped over the head and traditional rajput gold jewellery" },
 
-    6:  { bg: "Chattei River view (7).jpg",
+    6:  { bg: "chattei-river-view-7.jpg",
           setting: "18th-century Maratha riverside chhatri on the Narmada at Maheshwar",
           male:   "ahilyabai-era maratha nobleman in a crisp white cotton dhoti and bandgala-style kurta with a bright red pheta (maratha turban) and a simple shawl over one shoulder",
           female: "ahilyabai-era maharashtrian lady in a traditional burgundy nauvari saree (9-yard drape), a thushi (short gold choker), green glass bangles, a pearl necklace and a small decorative bindi" },
 
-    9:  { bg: "Krishnabai holkar chhatri .jpg",
+    9:  { bg: "krishnabai-holkar-chhatri.jpg",
           setting: "18th-century Holkar royal chhatri at Maheshwar",
           male:   "holkar-era maratha sardar in a cream cotton dhoti-kurta with a red pheta turban and a shawl draped over one shoulder",
           female: "holkar-era maharashtrian queen in a royal-blue nauvari saree with gold border, a thushi, pearl necklace and ornate traditional jewellery, styled after queen ahilyabai holkar" },
 
-    10: { bg: "Rajwada Indore.jpg",
+    10: { bg: "rajwada-indore.jpg",
           setting: "18th-century seven-storey Holkar palace in Indore",
           male:   "holkar-era maharaja in a cream brocade angarkha, churidar pyjama, a jewelled red pheta turban with a sarpech ornament, a kamarband and a pearl necklace",
           female: "holkar-era maharani in a peacock-green paithani saree with a heavy gold zari border, an ornate thushi, a multi-strand pearl necklace, maang tikka and traditional regal jewellery" },
 
-    11: { bg: "RajWada 15.jpg",
+    11: { bg: "rajwada-15.jpg",
           setting: "inner courtyard of the 18th-century Holkar palace in Indore",
           male:   "holkar-era maratha nobleman in a cream cotton dhoti-kurta with a red pheta turban and a simple shawl",
           female: "holkar-era royal lady in a teal nauvari saree with a gold border, a thushi, pearl necklace and traditional maharashtrian jewellery" },
 
-    12: { bg: "kheoni wildlife sanctuary .jpg",
+    12: { bg: "kheoni-wildlife-sanctuary.jpg",
           setting: "central Indian teak and sal forest at Kheoni Wildlife Sanctuary",
           male:   "modern wildlife safari explorer in a clean khaki short-sleeve shirt with a chest pocket, light beige cargo trousers, a wide-brim canvas safari hat and binoculars hanging around the neck",
           female: "modern wildlife safari explorer in a clean khaki short-sleeve shirt with a chest pocket, light beige cargo trousers, a wide-brim canvas safari hat and binoculars hanging around the neck" },
 
-    13: { bg: "kheoni wildlife sanctuary 1.jpg",
+    13: { bg: "kheoni-wildlife-sanctuary-1.jpg",
           setting: "forest trail through teak and bamboo at Kheoni Wildlife Sanctuary",
           male:   "modern wildlife safari explorer in a sand-beige short-sleeve shirt with a chest pocket, khaki cargo trousers, a wide-brim canvas safari hat and binoculars hanging around the neck",
           female: "modern wildlife safari explorer in a sand-beige short-sleeve shirt with a chest pocket, khaki cargo trousers, a wide-brim canvas safari hat and binoculars hanging around the neck" },
@@ -126,17 +127,17 @@ const PRESETS = {
     // 7   Sanchi Stupa               → modern cultural heritage explorer
     // 8   Mandu Jahaz Mahal          → early-1900s Indian heritage traveller
     // 14  Bandhavgarh Shesh Shaiya   → modern jungle / wildlife explorer
-    7:  { bg: "Sanchi Stupa.jpg",
+    7:  { bg: "sanchi-stupa.jpg",
           setting: "the UNESCO World Heritage Site of Sanchi Stupa in Madhya Pradesh, with its great hemispherical dome and intricately carved sandstone torana gateway, under bright daylight and a dramatic cloud-filled sky",
           male:   "modern cultural heritage explorer and traveller in a lightweight beige linen explorer shirt with the sleeves rolled up, an olive-khaki utility cargo jacket with travel pockets, khaki trekking trousers, brown hiking boots, a brown leather crossbody satchel bag clearly visible across the chest with the strap crossing the shoulder, a vintage leather wristwatch, and a lightweight neutral cotton scarf around the neck",
           female: "modern cultural heritage explorer and traveller in a light beige safari-style explorer jacket, olive-khaki cargo trousers, comfortable brown trekking boots, a soft natural-cotton stole around the neck, a brown leather crossbody satchel bag clearly visible at the front with the strap crossing the chest and shoulder, a vintage wristwatch — natural travel-photography look, no glamour styling" },
 
-    8:  { bg: "Jahaz Mahal Mandu.jpg",
+    8:  { bg: "jahaz-mahal-mandu.jpg",
           setting: "the Jahaz Mahal in the Royal Enclave at Mandu, Madhya Pradesh, on a soft cloudy monsoon day with overcast diffused daylight, lush bright-green monsoon surroundings and atmospheric moisture in the air",
           male:   "early-1900s Indian heritage traveller in a cream linen kurta shirt, a vintage safari-style overcoat, straight period trousers in muted earth tones, polished brown leather boots, a brown leather satchel bag fully visible at the front, holding a vintage leather field journal — optionally a cream sola topi pith helmet held in the hand",
           female: "elegant early-1900s heritage lady traveller in an ankle-length linen-and-cotton period travel dress in cream or muted earth tones, a lightweight embroidered cotton shawl draped over the shoulders, a fitted period travel overcoat, brown leather ankle boots, a small vintage brown satchel bag fully visible at the front, holding an antique leather diary — natural historical appearance, no glamour makeup, no bridal styling, no heavy jewellery, modest and fully covered" },
 
-    14: { bg: "Shesh Shaiya Bandhavgarh.jpg",
+    14: { bg: "shesh-shaiya-bandhavgarh.jpg",
           setting: "beside the ancient moss-covered Shesh Shaiya reclining Vishnu rock-cut sculpture by a still forest pool deep inside the lush green jungle of Bandhavgarh National Park, Madhya Pradesh, with a dense leafy canopy, soft filtered forest light, ferns and vines",
           male:   "modern wildlife and heritage jungle explorer in an olive-green long-sleeve cotton explorer shirt with a chest pocket, a lightweight khaki safari vest with pockets, rugged khaki trekking cargo trousers, brown jungle trekking boots, a brown leather explorer satchel clearly visible at the front with the strap crossing the chest, a pair of binoculars hanging around the neck, an optional explorer scarf — no weapons",
           female: "modern wildlife and heritage jungle explorer in a khaki long-sleeve cotton explorer shirt, a lightweight olive safari jacket, comfortable khaki trekking trousers, brown trekking boots, a brown leather crossbody explorer satchel clearly visible at the front with the strap crossing the chest and shoulder, a pair of binoculars or a compact travel camera, a lightweight neutral scarf — natural explorer look, no glamour makeup, no jewellery" },
@@ -267,10 +268,32 @@ module.exports = async function handler(req, res) {
         const b64 = result?.data?.[0]?.b64_json;
         if (!b64) throw new Error("GPT Image 2 returned no image data");
 
+        // Best-effort: tick the usage counter for this background AND log an
+        // individual generation event for the MIS view. A failure here must
+        // not block returning the generated image to the user.
+        try {
+            const db = getDb();
+            await Promise.all([
+                db.collection("usage").doc(preset.bg).set({
+                    filename:   preset.bg,
+                    count:      admin.firestore.FieldValue.increment(1),
+                    lastUsedAt: admin.firestore.FieldValue.serverTimestamp(),
+                }, { merge: true }),
+                db.collection("generations").add({
+                    backgroundFilename: preset.bg,
+                    presetId:           Number(presetId),
+                    gender,
+                    createdAt:          admin.firestore.FieldValue.serverTimestamp(),
+                }),
+            ]);
+        } catch (counterErr) {
+            console.warn("Usage counter / generation log failed:", counterErr.message);
+        }
+
         return res.json({
             success: true,
             generatedImage: b64,
-            mimeType: "image/png",
+            mimeType: "image/jpeg",
         });
     } catch (error) {
         console.error("❌ Error:", error.message);

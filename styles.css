@@ -1074,3 +1074,145 @@ p { margin: 0; color: var(--c-ink-soft); }
         transition-duration: 1ms !important;
     }
 }
+
+/* ── Feedback form ─────────────────────────────────────────────── */
+.feedback {
+    margin-top: var(--s-6);
+    padding: var(--s-5) var(--s-5);
+    border: 1px solid var(--c-border);
+    border-radius: var(--r-md, 12px);
+    background: var(--c-surface-alt);
+    text-align: center;
+}
+.feedback__title {
+    font-family: var(--f-display);
+    font-size: 1.4rem;
+    color: var(--c-ink);
+    margin: 0 0 var(--s-4);
+}
+.feedback__question {
+    margin: var(--s-4) 0;
+}
+.feedback__label {
+    font-size: 0.98rem;
+    color: var(--c-ink-soft);
+    margin: 0 0 var(--s-2);
+}
+.rating {
+    display: inline-flex;
+    gap: var(--s-1);
+    direction: ltr;
+}
+.rating__star {
+    background: transparent;
+    border: 0;
+    padding: 4px 6px;
+    font-size: 2rem;
+    line-height: 1;
+    color: var(--c-border-strong);
+    cursor: pointer;
+    transition: transform 80ms ease, color 120ms ease;
+}
+.rating__star:hover { transform: scale(1.15); }
+.rating__star:focus-visible {
+    outline: 2px solid var(--c-accent-soft);
+    outline-offset: 2px;
+    border-radius: 4px;
+}
+.rating[data-value="1"] .rating__star:nth-child(-n+1),
+.rating[data-value="2"] .rating__star:nth-child(-n+2),
+.rating[data-value="3"] .rating__star:nth-child(-n+3),
+.rating[data-value="4"] .rating__star:nth-child(-n+4),
+.rating[data-value="5"] .rating__star:nth-child(-n+5) {
+    color: var(--c-gold);
+}
+.feedback__thanks {
+    margin: var(--s-4) 0 0;
+    color: var(--c-success);
+    font-weight: 600;
+}
+.feedback.is-submitted .feedback__question,
+.feedback.is-submitted .button-row {
+    display: none;
+}
+
+/* ── Feedback modal ────────────────────────────────────────────── */
+.feedback-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(38, 32, 27, 0.6);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: var(--s-4);
+    animation: feedbackFadeIn 180ms ease-out;
+}
+/* Belt-and-braces: make sure the `hidden` attribute actually hides the
+   modal, regardless of any same-specificity `display` rule above. */
+.feedback-overlay[hidden] { display: none !important; }
+@keyframes feedbackFadeIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+/* When used as a modal, override the inline-card styles and add a card frame */
+.feedback-overlay .feedback {
+    position: relative;
+    margin: 0;
+    background: var(--c-surface);
+    max-width: 460px;
+    width: 100%;
+    box-shadow: 0 24px 70px rgba(0, 0, 0, 0.35);
+    animation: feedbackPopIn 220ms cubic-bezier(.2, .9, .3, 1.2);
+}
+@keyframes feedbackPopIn {
+    from { transform: translateY(20px) scale(0.96); opacity: 0; }
+    to   { transform: translateY(0)    scale(1);    opacity: 1; }
+}
+.feedback__close {
+    position: absolute;
+    top: 6px;
+    right: 8px;
+    background: transparent;
+    border: 0;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    font-size: 1.6rem;
+    line-height: 1;
+    color: var(--c-muted);
+    cursor: pointer;
+    transition: background 120ms ease, color 120ms ease;
+}
+.feedback__close:hover {
+    background: var(--c-bg-alt);
+    color: var(--c-ink);
+}
+
+/* ── Destination card: usage count badge ───────────────────────── */
+.destination-card__uses {
+    position: absolute;
+    top: var(--s-2);
+    left: var(--s-2);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 9px 4px 7px;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.62);
+    color: #fff;
+    font-size: 0.78rem;
+    font-weight: 600;
+    line-height: 1;
+    letter-spacing: 0.01em;
+    backdrop-filter: blur(4px);
+    z-index: 2;
+    pointer-events: none;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+}
+.destination-card__uses svg {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+}

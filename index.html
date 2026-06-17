@@ -177,7 +177,7 @@
                     </button>
                     <button id="printBtn" class="btn btn--primary">Print</button>
                 </div>
-                <p class="reveal-result__credit">Your face is composited onto a pre-approved heritage scene — the background is fixed and never altered.</p>
+                <p class="reveal-result__credit">Your face and body are AI-composited into a Madhya Pradesh heritage scene — actual likeness may vary slightly.</p>
             </div>
 
         </section>
@@ -187,6 +187,43 @@
     <footer class="site-footer">
         <p>Crafted for Madhya Pradesh heritage experiences · <span id="yearSpan"></span></p>
     </footer>
+
+    <!-- Post-generation feedback modal -->
+    <div class="feedback-overlay" id="feedbackOverlay" role="dialog" aria-modal="true" aria-labelledby="feedbackTitle" hidden>
+        <section class="feedback" id="feedbackPanel">
+            <button type="button" class="feedback__close" id="feedbackCloseBtn" aria-label="Close feedback">&times;</button>
+            <h2 class="feedback__title" id="feedbackTitle">How did we do?</h2>
+
+            <div class="feedback__question">
+                <p class="feedback__label">Did you like the image?</p>
+                <div class="rating" role="radiogroup" data-rating="rating1" aria-label="Rate the image, 1 to 5 stars">
+                    <button type="button" class="rating__star" data-value="1" aria-label="1 star">★</button>
+                    <button type="button" class="rating__star" data-value="2" aria-label="2 stars">★</button>
+                    <button type="button" class="rating__star" data-value="3" aria-label="3 stars">★</button>
+                    <button type="button" class="rating__star" data-value="4" aria-label="4 stars">★</button>
+                    <button type="button" class="rating__star" data-value="5" aria-label="5 stars">★</button>
+                </div>
+            </div>
+
+            <div class="feedback__question">
+                <p class="feedback__label">Would you like to share it on social media?</p>
+                <div class="rating" role="radiogroup" data-rating="rating2" aria-label="How likely you would share on social media, 1 to 5 stars">
+                    <button type="button" class="rating__star" data-value="1" aria-label="1 star">★</button>
+                    <button type="button" class="rating__star" data-value="2" aria-label="2 stars">★</button>
+                    <button type="button" class="rating__star" data-value="3" aria-label="3 stars">★</button>
+                    <button type="button" class="rating__star" data-value="4" aria-label="4 stars">★</button>
+                    <button type="button" class="rating__star" data-value="5" aria-label="5 stars">★</button>
+                </div>
+            </div>
+
+            <div class="button-row">
+                <button type="button" id="skipFeedbackBtn" class="btn btn--ghost">Skip</button>
+                <button type="button" id="submitFeedbackBtn" class="btn btn--primary" disabled>Send feedback</button>
+            </div>
+
+            <p class="feedback__thanks" id="feedbackThanks" hidden>Thank you for your feedback! ✨</p>
+        </section>
+    </div>
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
