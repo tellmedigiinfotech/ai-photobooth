@@ -755,6 +755,18 @@ p { margin: 0; color: var(--c-ink-soft); }
     .gender-toggle__option { min-width: 0; padding: var(--s-3); }
 }
 
+/* Two-shot capture: the "Photo 1 of 2" eyebrow above the capture heading. */
+.capture-phase {
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--c-accent);
+    margin: 0 0 var(--s-2);
+}
+/* Body-type selector sits just below the gender toggle. */
+.build-toggle { margin-top: var(--s-4); }
+
 .destinations {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));

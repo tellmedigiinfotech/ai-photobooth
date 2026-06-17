@@ -7,12 +7,29 @@
 const state = {
     step: 1,
     stream: null,
-    capturedBlob: null,
-    capturedUrl: null,
+    // Two-shot capture: a face close-up (drives the face-swap) and a full-body
+    // shot (drives the body-build match). `pending*` holds the shot currently
+    // under review before it's confirmed into face*/body*.
+    capturePhase: 'face',        // 'face' | 'body'
+    pendingBlob: null,
+    pendingUrl: null,
+    faceBlob: null,
+    faceUrl: null,
+    bodyBlob: null,
+    bodyUrl: null,
     selectedPreset: null,
     selectedGender: null,
+    selectedBuild: 'average',    // slim | average | heavier — body-build template variant
     cameraDevices: [],
 };
+
+const BUILDS = ['slim', 'average', 'heavier'];
+
+// The frozen, ops-approved hero template for a (preset, gender, build). The app
+// face-swaps the visitor onto this exact image, so the background never changes.
+function templateUrl(presetId, gender, build) {
+    return `assets/templates/preset-${presetId}-${gender || 'male'}-${build || 'average'}.jpg`;
+}
 
 // ── DOM ──────────────────────────────────────────────────────────
 const $ = (id) => document.getElementById(id);
@@ -35,11 +52,19 @@ const el = {
     capturedImage:      $('capturedImage'),
     retakeBtn:          $('retakeBtn'),
     toStep2Btn:         $('toStep2Btn'),
+    capturePhaseLabel:  $('capturePhaseLabel'),
+    captureTitle:       $('step1-title'),
+    captureIntro:       $('captureIntro'),
+    captureReviewTitle: $('captureReviewTitle'),
+    captureReviewIntro: $('captureReviewIntro'),
 
     // Step 2
     contextPhoto:       $('contextPhoto'),
     editPhotoBtn:       $('editPhotoBtn'),
     genderRadios:       document.querySelectorAll('input[name="gender"]'),
+    buildToggle:        $('buildToggle'),
+    buildRadios:        document.querySelectorAll('input[name="build"]'),
+    buildPrompt:        $('buildPrompt'),
     presetsGrid:        $('presetsGrid'),
     generateBtn:        $('generateBtn'),
     selectedDestName:   $('selectedDestinationName'),
@@ -120,6 +145,7 @@ function preloadBrandLogos() {
 // ═══════════════════════════════════════════════════════════════
 
 function init() {
+    setCapturePhase('face');
     renderDestinations();
     wireEvents();
     loadCameraDevices();
@@ -224,6 +250,37 @@ async function handleCameraChange() {
     toast('Camera switched.', 'success');
 }
 
+// Copy per phase, so one capture view serves both the face and body shots.
+const CAPTURE_COPY = {
+    face: {
+        phase:  'Photo 1 of 2 · Face close-up',
+        title:  'Smile for the camera',
+        intro:  'A close-up of your face — look straight into the lens, keep your head and shoulders inside the guide.',
+        review: 'How’s your face shot?',
+        next:   'Looks good →',
+    },
+    body: {
+        phase:  'Photo 2 of 2 · Full body',
+        title:  'Now step back',
+        intro:  'A full-body shot, head to knees — this is used only to match your body type, then discarded.',
+        review: 'How’s your full-body shot?',
+        next:   'Use this →',
+    },
+};
+
+function setCapturePhase(phase) {
+    state.capturePhase = phase;
+    const c = CAPTURE_COPY[phase];
+    el.capturePhaseLabel.textContent = c.phase;
+    el.captureTitle.textContent = c.title;
+    el.captureIntro.textContent = c.intro;
+    el.captureReviewTitle.textContent = c.review;
+    el.toStep2Btn.textContent = c.next;
+    // Back to the live view for the new shot (camera keeps running).
+    el.captureReview.hidden = true;
+    el.captureView.hidden = false;
+}
+
 function capturePhoto() {
     const ctx = el.canvas.getContext('2d');
     el.canvas.width = el.webcam.videoWidth;
@@ -239,10 +296,10 @@ function capturePhoto() {
 
     el.canvas.toBlob(blob => {
         if (!blob) { toast('Capture failed. Try again.', 'error'); return; }
-        state.capturedBlob = blob;
-        if (state.capturedUrl) URL.revokeObjectURL(state.capturedUrl);
-        state.capturedUrl = URL.createObjectURL(blob);
-        el.capturedImage.src = state.capturedUrl;
+        state.pendingBlob = blob;
+        if (state.pendingUrl) URL.revokeObjectURL(state.pendingUrl);
+        state.pendingUrl = URL.createObjectURL(blob);
+        el.capturedImage.src = state.pendingUrl;
 
         // Flip to review state
         el.captureView.hidden = true;
@@ -251,16 +308,67 @@ function capturePhoto() {
 }
 
 function retakePhoto() {
-    state.capturedBlob = null;
-    if (state.capturedUrl) { URL.revokeObjectURL(state.capturedUrl); state.capturedUrl = null; }
+    state.pendingBlob = null;
+    if (state.pendingUrl) { URL.revokeObjectURL(state.pendingUrl); state.pendingUrl = null; }
     el.captureReview.hidden = true;
     el.captureView.hidden = false;
 }
 
-function confirmCaptureAndAdvance() {
-    if (!state.capturedBlob) return;
-    if (state.capturedUrl) el.contextPhoto.src = state.capturedUrl;
+// "Looks good" on the review screen. Face → advance to the body shot.
+// Body → keep the shot, kick off build classification, and go to step 2.
+async function confirmCaptureAndAdvance() {
+    if (!state.pendingBlob) return;
+
+    if (state.capturePhase === 'face') {
+        state.faceBlob = state.pendingBlob;
+        if (state.faceUrl) URL.revokeObjectURL(state.faceUrl);
+        state.faceUrl = state.pendingUrl;
+        state.pendingBlob = null;
+        state.pendingUrl = null;
+        el.contextPhoto.src = state.faceUrl;
+        setCapturePhase('body');
+        return;
+    }
+
+    // body phase
+    state.bodyBlob = state.pendingBlob;
+    if (state.bodyUrl) URL.revokeObjectURL(state.bodyUrl);
+    state.bodyUrl = state.pendingUrl;
+    state.pendingBlob = null;
+    state.pendingUrl = null;
+
     goToStep(2);
+    classifyBuild(state.bodyBlob); // async; preselects the body-type radio
+}
+
+// Ask the server to classify the full-body shot as slim/average/heavier and
+// preselect it. Non-blocking and best-effort — the operator can always adjust,
+// and we default to "average" if it fails.
+async function classifyBuild(bodyBlob) {
+    el.buildPrompt.textContent = 'Reading your body type…';
+    try {
+        const img = await compressImage(bodyBlob, 0.85, 1024);
+        const form = new FormData();
+        form.append('bodyImage', img, 'body.jpg');
+        const res = await fetch('/api/classify-build', { method: 'POST', body: form });
+        const data = await res.json();
+        if (res.ok && data.build && BUILDS.includes(data.build)) {
+            setBuild(data.build);
+            el.buildPrompt.textContent = 'Body type — matched from your full-body photo, adjust if needed';
+        } else {
+            throw new Error(data.error || 'no build');
+        }
+    } catch (err) {
+        console.warn('Build classification failed, defaulting to average:', err);
+        setBuild('average');
+        el.buildPrompt.textContent = 'Body type — pick the closest match';
+    }
+}
+
+function setBuild(build) {
+    state.selectedBuild = BUILDS.includes(build) ? build : 'average';
+    el.buildRadios.forEach(r => { r.checked = (r.value === state.selectedBuild); });
+    renderDestinations(); // hero thumbnails reflect the chosen build
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -272,17 +380,24 @@ function visiblePresets() {
 }
 
 function renderDestinations() {
+    const gender = state.selectedGender || 'male';
+    const build = state.selectedBuild || 'average';
     const frag = document.createDocumentFragment();
     visiblePresets().forEach(p => {
         const card = document.createElement('button');
         card.type = 'button';
         card.className = 'destination-card';
         card.setAttribute('role', 'radio');
-        card.setAttribute('aria-checked', 'false');
+        card.setAttribute('aria-checked', state.selectedPreset?.id === p.id ? 'true' : 'false');
+        if (state.selectedPreset?.id === p.id) card.classList.add('is-selected');
         card.dataset.presetId = p.id;
+        // Show the actual frozen hero template the visitor will receive (minus
+        // their face). Falls back to the raw background if a template is missing.
+        const tpl = templateUrl(p.id, gender, build);
         card.innerHTML = `
             <div class="destination-card__media">
-                <img src="${p.backgroundUrl}" alt="" loading="lazy" />
+                <img src="${tpl}" alt="" loading="lazy"
+                     onerror="this.onerror=null;this.src='${p.backgroundUrl}'" />
             </div>
             <div class="destination-card__check" aria-hidden="true">
                 <svg viewBox="0 0 24 24"><path fill="currentColor" d="m9.55 17.575-4.95-4.95 1.414-1.414 3.536 3.536 7.07-7.071 1.415 1.414-8.485 8.485Z"/></svg>
@@ -362,6 +477,15 @@ function base64ToBlob(b64, mimeType) {
     const arr = new Uint8Array(bytes.length);
     for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
     return new Blob([arr], { type: mimeType || 'image/png' });
+}
+
+function blobToBase64(blob) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result); // data: URL
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+    });
 }
 
 // Composite the brand logo (top-right, circular badge with white ring) and
@@ -509,8 +633,8 @@ function stopLoadingHints() {
 }
 
 async function generate() {
-    if (!state.capturedBlob || !state.selectedPreset || !state.selectedGender) {
-        toast('Please capture a photo, pick male/female, and choose a destination.', 'error');
+    if (!state.faceBlob || !state.selectedPreset || !state.selectedGender) {
+        toast('Please capture your photos, pick male/female, and choose a destination.', 'error');
         return;
     }
 
@@ -520,46 +644,38 @@ async function generate() {
     startLoadingHints();
 
     try {
-        const userImg = await compressImage(state.capturedBlob, 0.95, 2048);
+        const userImg = await compressImage(state.faceBlob, 0.95, 2048);
 
-        const genForm = new FormData();
-        genForm.append('userImage', userImg, 'photo.jpg');
-        genForm.append('presetId', String(state.selectedPreset.id));
-        genForm.append('gender', state.selectedGender);
+        // Fetch the frozen, ops-approved hero template for this preset + gender
+        // + body build. We DON'T generate a scene per user — we only swap the
+        // visitor's face onto this fixed image, so the background is identical
+        // every time and the output is predictable.
+        const tplResp = await fetch(templateUrl(state.selectedPreset.id, state.selectedGender, state.selectedBuild));
+        if (!tplResp.ok) throw new Error('This look isn’t ready yet — please pick another destination.');
+        const templateBlob = await tplResp.blob();
 
-        const genRes = await fetch('/api/generate', { method: 'POST', body: genForm });
-        const genData = await genRes.json();
-        if (!genRes.ok || !genData.success) {
-            throw new Error(genData.details || genData.error || 'Generation failed');
+        // Face-swap the visitor onto the template.
+        const swapForm = new FormData();
+        swapForm.append('sourceImage', userImg, 'face.jpg');
+        swapForm.append('targetImage', templateBlob, 'template.png');
+
+        const swapRes = await fetch('/api/faceswap', { method: 'POST', body: swapForm });
+        const swapData = await swapRes.json();
+        if (!swapRes.ok || !swapData.success) {
+            throw new Error(swapData.details || swapData.error || 'Face swap failed');
         }
 
-        // Identity finisher: Gemini repaints the whole image, so the face it
-        // outputs is an approximation. /api/faceswap pastes the visitor's
-        // real face back onto the generated scene. If the swap fails for any
-        // reason we still show the Gemini image — the booth never breaks.
-        let imageB64 = genData.generatedImage;
-        let imageMime = genData.mimeType;
-        if (!genData.note) { // skip the swap when /api/generate ran in mock mode
-            try {
-                const sceneBlob = base64ToBlob(genData.generatedImage, genData.mimeType);
-                const swapForm = new FormData();
-                swapForm.append('sourceImage', userImg, 'face.jpg');
-                swapForm.append('targetImage', sceneBlob, 'scene.png');
-
-                const swapRes = await fetch('/api/faceswap', { method: 'POST', body: swapForm });
-                const swapData = await swapRes.json();
-                if (swapRes.ok && swapData.success && swapData.generatedImage && !swapData.note) {
-                    imageB64 = swapData.generatedImage;
-                    imageMime = swapData.mimeType;
-                } else {
-                    console.warn('Face swap skipped:', swapData.note || swapData.details || swapData.error);
-                }
-            } catch (swapErr) {
-                console.warn('Face swap failed, using Gemini image as-is:', swapErr);
-            }
+        // swapData.note means the swap couldn't run (e.g. no Replicate token) —
+        // it returns the template unchanged. That's a config issue, not a result
+        // we'd want to hand a visitor (it'd show a stranger's face), so flag it.
+        let rawDataUrl;
+        if (swapData.note) {
+            console.warn('Face swap skipped:', swapData.note);
+            const tplB64 = await blobToBase64(templateBlob);
+            rawDataUrl = tplB64;
+        } else {
+            rawDataUrl = `data:${swapData.mimeType};base64,${swapData.generatedImage}`;
         }
-
-        const rawDataUrl = `data:${imageMime};base64,${imageB64}`;
         let finalDataUrl;
         try {
             finalDataUrl = await brandifyImage(rawDataUrl, state.selectedPreset.name);
@@ -572,7 +688,7 @@ async function generate() {
         el.loadingState.hidden = true;
         el.resultPanel.hidden = false;
 
-        if (genData.note) toast(genData.note, 'error', 6000);
+        if (swapData.note) toast('Face swap is not configured — showing the sample look.', 'error', 6000);
         else toast('Your photo is ready!', 'success');
     } catch (err) {
         console.error(err);
@@ -633,15 +749,21 @@ async function shareWhatsApp() {
 
 function resetAll() {
     retakePhoto();
+    // Clear both captures and start the camera flow over at the face shot.
+    [state.faceUrl, state.bodyUrl].forEach(u => { if (u) URL.revokeObjectURL(u); });
+    state.faceBlob = state.faceUrl = state.bodyBlob = state.bodyUrl = null;
     state.selectedPreset = null;
     state.selectedGender = null;
+    state.selectedBuild = 'average';
     el.presetsGrid.querySelectorAll('.destination-card').forEach(c => {
         c.classList.remove('is-selected');
         c.setAttribute('aria-checked', 'false');
     });
     el.genderRadios.forEach(r => { r.checked = false; });
+    el.buildRadios.forEach(r => { r.checked = false; });
     el.selectedDestName.textContent = 'Nothing yet';
     el.generateBtn.disabled = true;
+    setCapturePhase('face');
     goToStep(1);
 }
 
@@ -670,10 +792,12 @@ function wireEvents() {
 
     el.editPhotoBtn.addEventListener('click', () => {
         retakePhoto();
+        setCapturePhase('face');
         goToStep(1);
     });
 
     el.genderRadios.forEach(r => r.addEventListener('change', handleGenderChange));
+    el.buildRadios.forEach(r => r.addEventListener('change', e => setBuild(e.target.value)));
 
     el.generateBtn.addEventListener('click', generate);
 

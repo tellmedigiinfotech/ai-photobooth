@@ -46,8 +46,9 @@
         <!-- ═══ Step 1: Capture ═══ -->
         <section class="step step--active" data-step="1" aria-labelledby="step1-title">
             <header class="step__header">
+                <p class="capture-phase" id="capturePhaseLabel">Photo 1 of 2 · Face close-up</p>
                 <h1 id="step1-title">Smile for the camera</h1>
-                <p class="step__intro">Look straight into the lens, keep your head and shoulders inside the guide, and capture when ready.</p>
+                <p class="step__intro" id="captureIntro">Look straight into the lens, keep your head and shoulders inside the guide, and capture when ready.</p>
             </header>
 
             <div class="capture-view" data-state="idle">
@@ -80,8 +81,8 @@
             </div>
 
             <div class="capture-review" id="captureReview" hidden>
-                <h2>How's this?</h2>
-                <p class="step__intro">If you like it, move on. Otherwise, retake.</p>
+                <h2 id="captureReviewTitle">How's this?</h2>
+                <p class="step__intro" id="captureReviewIntro">If you like it, move on. Otherwise, retake.</p>
                 <figure class="capture-review__frame">
                     <img id="capturedImage" alt="Your captured photo" />
                 </figure>
@@ -128,6 +129,27 @@
                 </div>
             </fieldset>
 
+            <fieldset class="gender-toggle build-toggle" id="buildToggle" aria-label="Body type">
+                <legend class="gender-toggle__legend">
+                    <span class="gender-toggle__step">Then</span>
+                    <span class="gender-toggle__prompt" id="buildPrompt">Body type — matched from the full-body photo, adjust if needed</span>
+                </legend>
+                <div class="gender-toggle__options">
+                    <label class="gender-toggle__option">
+                        <input type="radio" name="build" value="slim" />
+                        <span class="gender-toggle__label">Slim</span>
+                    </label>
+                    <label class="gender-toggle__option">
+                        <input type="radio" name="build" value="average" />
+                        <span class="gender-toggle__label">Average</span>
+                    </label>
+                    <label class="gender-toggle__option">
+                        <input type="radio" name="build" value="heavier" />
+                        <span class="gender-toggle__label">Heavier</span>
+                    </label>
+                </div>
+            </fieldset>
+
             <div class="destinations" id="presetsGrid" role="radiogroup" aria-label="Heritage destinations">
                 <!-- Populated by app.js -->
             </div>
@@ -154,7 +176,7 @@
                     <span></span><span></span><span></span>
                 </div>
                 <h1 id="step3-title">Creating your masterpiece</h1>
-                <p class="step__intro">Weaving you into the scene… this usually takes about 15–30 seconds.</p>
+                <p class="step__intro">Placing your face into the scene… this usually takes about 15–25 seconds.</p>
                 <p class="reveal-loading__hint" id="loadingHint"></p>
             </div>
 
@@ -176,7 +198,7 @@
                     </button>
                     <button id="printBtn" class="btn btn--primary">Print</button>
                 </div>
-                <p class="reveal-result__credit">Generated with Google Gemini. Faces are AI-composited — actual identities may vary slightly.</p>
+                <p class="reveal-result__credit">Your face is composited onto a pre-approved heritage scene — the background is fixed and never altered.</p>
             </div>
 
         </section>
