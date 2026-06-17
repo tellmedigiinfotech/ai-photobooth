@@ -105,15 +105,38 @@ const PRESETS = {
           female: "modern wildlife and heritage jungle explorer in a khaki long-sleeve cotton explorer shirt, a lightweight olive safari jacket, comfortable khaki trekking trousers, brown trekking boots, a brown leather crossbody explorer satchel clearly visible at the front with the strap crossing the chest and shoulder, a pair of binoculars or a compact travel camera, a lightweight neutral scarf — natural explorer look, no glamour makeup, no jewellery" },
 };
 
-function buildPrompt(preset, gender, hasBody) {
+// Vision pass: "note the facial characteristics". Turns the face photo into a
+// factual written description a generator can paint from — so GPT Image 2 paints
+// a fresh, scene-lit face that matches the person instead of pasting the source
+// photo (which is what made the face look patched-on).
+async function describeFace(openai, image) {
+    const dataUrl = `data:${image.mimeType || "image/jpeg"};base64,${image.buffer.toString("base64")}`;
+    const c = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        max_tokens: 240,
+        messages: [{
+            role: "user",
+            content: [
+                { type: "text", text: "Describe ONLY this person's facial characteristics for a portrait painter who must reproduce their likeness from scratch. In 3-5 precise, factual sentences cover: apparent age range, gender presentation, skin tone/complexion, face shape, forehead, eyebrows, eye shape/size/colour and spacing, nose shape, lips, cheekbones and jawline, chin, hairline, hair (length/style/colour/texture), any facial hair, and any distinctive marks (moles, dimples, etc.). Be specific and neutral. Do NOT mention lighting, camera, background, clothing, accessories or expression." },
+                { type: "image_url", image_url: { url: dataUrl, detail: "high" } },
+            ],
+        }],
+    });
+    return (c.choices?.[0]?.message?.content || "").trim();
+}
+
+function buildPrompt(preset, gender, hasBody, faceDescription) {
     const outfit = gender === "female" ? preset.female : preset.male;
     // Image legend + body-type rule adapt to whether a full-body shot was sent.
     const legend = hasBody
-        ? `IMAGE 1 = the person's FACE (close-up) — use this for facial likeness.
+        ? `IMAGE 1 = a reference of the person's FACE — study their facial characteristics from it, but IGNORE its lighting, colour, white balance, background, camera and pose entirely. It is a likeness reference, NOT pixels to copy.
 IMAGE 2 = a full-body photo of the SAME person — use this ONLY to read their body type, build and proportions (height, weight, frame). Ignore the clothing, pose and background in Image 2.
 IMAGE 3 = the LOCATION (a real heritage site) — use this as the background and for scene lighting.`
-        : `IMAGE 1 = the person's FACE — use this for facial likeness.
+        : `IMAGE 1 = a reference of the person's FACE — study their facial characteristics from it, but IGNORE its lighting, colour, background, camera and pose. It is a likeness reference, NOT pixels to copy.
 IMAGE 2 = the LOCATION (a real heritage site) — use this as the background and for scene lighting.`;
+    const faceChars = faceDescription
+        ? `\n\nThe person's facial characteristics (reproduce these faithfully): ${faceDescription}`
+        : "";
     const bodyRule = hasBody
         ? `
 
@@ -126,7 +149,7 @@ ${legend}
 
 TASK: Show this exact person on location at ${preset.setting}, dressed as a ${outfit}. The result must look like a genuine photograph of that same individual taken at that place.
 
-IDENTITY. Use Image 1 only as the reference for WHO this person is — reproduce their recognisable facial features and proportions: the same eye shape and spacing, eyebrows, nose, mouth and lips, jawline, face shape, cheekbones, hairline and apparent age, so anyone who knows them recognises them instantly. Keep their real features and natural skin — do not beautify, smooth, slim, sharpen the jaw, enlarge the eyes, de-age, or swap in a different face. BUT render the face FRESH as a part of THIS photograph — it is NOT a cut-out of the reference photo. You must re-light, re-shade and colour-grade the face to belong to this scene (see BLENDING below).${bodyRule}
+IDENTITY — PAINT THE FACE FRESH, DO NOT PASTE IT. Note the person's facial characteristics from Image 1${faceDescription ? " and the description below" : ""}, then GENERATE their face entirely from scratch as a natural part of this photograph. Reproduce their recognisable features and proportions — the same eye shape and spacing, eyebrows, nose, mouth and lips, jawline, face shape, cheekbones, hairline and apparent age — so anyone who knows them recognises them instantly, while keeping their real features (do not beautify, slim, sharpen the jaw, enlarge the eyes, de-age, or swap in a different face). The face must NOT be a cut-out, overlay or copy of the reference photo; it is freshly rendered, lit only by this scene.${faceChars}${bodyRule}
 
 FRAMING & POSE. A natural waist-up or three-quarter portrait with the face clearly visible, sharp and well-lit. Use a RELAXED, candid pose — a natural stance with weight shifted easily, a calm genuine expression or a soft natural smile, perhaps a slight turn of the head or shoulders. Do NOT make it a stiff, rigid, perfectly symmetrical, straight-on "mugshot". It should feel like a real travel photograph someone actually posed for at the site, not a posed studio cut-out.
 
@@ -182,21 +205,30 @@ module.exports = async function handler(req, res) {
             });
         }
 
-        const prompt = buildPrompt(preset, gender, !!bodyImage);
+        const openai = new OpenAI({ apiKey: openaiKey });
+
+        // First "note the facial characteristics" — a vision pass turns the face
+        // into a written description. GPT Image 2 then PAINTS the face from that
+        // description (cinematically lit by the scene) instead of compositing the
+        // reference photo's pixels/lighting, which is what caused the "patched-on"
+        // look. Best-effort: if it fails we still generate from the image alone.
+        let faceDescription = "";
+        try {
+            faceDescription = await describeFace(openai, userImage);
+            console.log("Face description:", faceDescription);
+        } catch (descErr) {
+            console.warn("Face description failed:", descErr.message);
+        }
+
+        const prompt = buildPrompt(preset, gender, !!bodyImage, faceDescription);
         console.log("Prompt:", prompt);
 
         const background = await fetchBackgroundBuffer(req, preset.bg);
 
         // GPT Image 2 (images/edits) with up to THREE inputs, in prompt order:
-        //   Image 1 = face close-up  → facial likeness
+        //   Image 1 = face reference → facial characteristics (NOT pixels to paste)
         //   Image 2 = full-body shot → body type / build (optional)
         //   Image 3 = heritage photo → background + scene lighting
-        // The model renders the person in period attire at the location, matching
-        // their face AND their real body build. A deterministic inswapper
-        // face-swap still runs afterwards (client → /api/faceswap) to lock the
-        // exact identity. gpt-image-2 has no input_fidelity knob — it handles
-        // identity natively, and the swap removes any remaining drift.
-        const openai = new OpenAI({ apiKey: openaiKey });
         const userFile = await toFile(
             userImage.buffer,
             "face.png",
