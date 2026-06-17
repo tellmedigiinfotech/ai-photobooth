@@ -24,8 +24,12 @@ const state = {
     usageCounts: {},
 };
 
+// Presets that have a generated sample image. Others show the raw heritage
+// background in the picker until their sample is generated.
+const SAMPLE_PRESET_IDS = new Set([1, 2, 3, 4, 6, 7]);
+
 // The picker sample (1 per preset+gender) — shown so the visitor sees the kind
-// of result a destination produces. Falls back to the raw background if absent.
+// of result a destination produces.
 function sampleUrl(presetId, gender) {
     return `assets/templates/sample-${presetId}-${gender || 'male'}.jpg`;
 }
@@ -46,6 +50,7 @@ const el = {
     cameraSourceField:  $('cameraSourceField'),
     cameraSelect:       $('cameraSelect'),
     captureBtn:         $('captureBtn'),
+    captureCountdown:   $('captureCountdown'),
     captureView:        document.querySelector('.capture-view'),
     captureReview:      $('captureReview'),
     capturedImage:      $('capturedImage'),
@@ -291,6 +296,31 @@ function setCapturePhase(phase) {
     el.captureView.hidden = false;
 }
 
+// Run a 5-second on-screen countdown, then take the shot — gives the visitor
+// time to pose. Guards against re-entry while a countdown is already running.
+let countdownTimer = null;
+function startCaptureCountdown() {
+    if (countdownTimer) return;
+    if (!state.stream) { capturePhoto(); return; } // camera not live yet
+    el.captureBtn.disabled = true;
+    let n = 5;
+    const tick = () => {
+        el.captureCountdown.hidden = false;
+        el.captureCountdown.innerHTML = `<span class="capture-countdown__num">${n}</span>`;
+        if (n === 0) {
+            clearInterval(countdownTimer);
+            countdownTimer = null;
+            el.captureCountdown.hidden = true;
+            el.captureBtn.disabled = false;
+            capturePhoto();
+            return;
+        }
+        n -= 1;
+    };
+    tick(); // show "5" immediately
+    countdownTimer = setInterval(tick, 1000);
+}
+
 function capturePhoto() {
     const ctx = el.canvas.getContext('2d');
     el.canvas.width = el.webcam.videoWidth;
@@ -369,14 +399,14 @@ function renderDestinations() {
         card.setAttribute('aria-checked', state.selectedPreset?.id === p.id ? 'true' : 'false');
         if (state.selectedPreset?.id === p.id) card.classList.add('is-selected');
         card.dataset.presetId = p.id;
-        // Show a sample of the kind of result this destination produces. Falls
-        // back to the raw heritage background if no sample exists yet.
-        const sample = sampleUrl(p.id, gender);
+        // Show the generated sample where we have one; otherwise the raw
+        // heritage background. (onerror is a final safety net.)
+        const thumb = SAMPLE_PRESET_IDS.has(p.id) ? sampleUrl(p.id, gender) : p.backgroundUrl;
         const filename = (p.backgroundUrl || '').split('/').pop();
         const count = state.usageCounts[filename] || 0;
         card.innerHTML = `
             <div class="destination-card__media">
-                <img src="${sample}" alt="" loading="lazy"
+                <img src="${thumb}" alt="" loading="lazy"
                      onerror="this.onerror=null;this.src='${p.backgroundUrl}'" />
                 <div class="destination-card__uses" aria-label="Used ${count} times">
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5Zm0 12.5a5 5 0 1 1 0-10 5 5 0 0 1 0 10Zm0-8a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z"/></svg>
@@ -765,7 +795,7 @@ function toast(message, type = '', duration = 3200) {
 function wireEvents() {
     el.startCameraBtn.addEventListener('click', startCamera);
     el.cameraSelect.addEventListener('change', handleCameraChange);
-    el.captureBtn.addEventListener('click', capturePhoto);
+    el.captureBtn.addEventListener('click', startCaptureCountdown);
     el.retakeBtn.addEventListener('click', retakePhoto);
     el.toStep2Btn.addEventListener('click', confirmCaptureAndAdvance);
 
