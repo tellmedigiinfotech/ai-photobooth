@@ -1,15 +1,16 @@
 // ═════════════════════════════════════════════════════════════════
-//  AI Photobooth — Heritage edition
-//  Three-step wizard: Capture → Choose → Reveal
+//  Samay Yatra — The Heritage Time-Visa
+//  An iPad-portrait kiosk: Attract → Capture (2 shots) → Choose →
+//  Generate → Reveal. The passport/visa ceremony is a skin over the
+//  proven Capture→Choose→Reveal pipeline; the network contract and the
+//  canvas brandify pipeline are byte-for-byte unchanged.
 // ═════════════════════════════════════════════════════════════════
 
 // ── State ────────────────────────────────────────────────────────
 const state = {
-    step: 1,
+    screen: 'attract',
     stream: null,
-    // Two-shot capture: a face close-up (Image 1 → facial likeness) and a
-    // full-body shot (Image 2 → body type). Both are sent to /api/generate.
-    // `pending*` holds the shot under review before it's confirmed.
+    mirrorStream: null,
     capturePhase: 'face',        // 'face' | 'body'
     pendingBlob: null,
     pendingUrl: null,
@@ -20,21 +21,24 @@ const state = {
     selectedPreset: null,
     selectedGender: null,
     cameraDevices: [],
-    // { "bhimbetka-rock-shelter.jpg": 12, ... } — populated by /api/usage
     usageCounts: {},
 };
-
-// The picker always shows the raw heritage background as the template image —
-// no generated sample user photos.
 
 // ── DOM ──────────────────────────────────────────────────────────
 const $ = (id) => document.getElementById(id);
 
 const el = {
-    stepperItems: document.querySelectorAll('.stepper__item'),
-    stepSections: document.querySelectorAll('.step'),
+    app:                $('app'),
 
-    // Step 1
+    // Attract
+    beginBtn:           $('beginBtn'),
+    mirrorVideo:        $('mirrorVideo'),
+    attractCrest:       document.querySelector('.passport__crest'),
+    visaDrift:          $('visaDrift'),
+    usageCount:         $('usageCount'),
+    demoRibbon:         $('demoRibbon'),
+
+    // Capture
     webcam:             $('webcam'),
     canvas:             $('canvas'),
     cameraPlaceholder:  $('cameraPlaceholder'),
@@ -44,6 +48,8 @@ const el = {
     cameraSelect:       $('cameraSelect'),
     captureBtn:         $('captureBtn'),
     captureCountdown:   $('captureCountdown'),
+    cameraGuide:        $('cameraGuide'),
+    cameraFlash:        $('cameraFlash'),
     captureView:        document.querySelector('.capture-view'),
     captureReview:      $('captureReview'),
     capturedImage:      $('capturedImage'),
@@ -54,55 +60,93 @@ const el = {
     captureIntro:       $('captureIntro'),
     captureReviewTitle: $('captureReviewTitle'),
     captureReviewIntro: $('captureReviewIntro'),
+    wellFace:           $('wellFace'),
+    wellBody:           $('wellBody'),
+    wellFaceImg:        $('wellFaceImg'),
+    wellBodyImg:        $('wellBodyImg'),
 
-    // Step 2
+    // Choose
     contextPhoto:       $('contextPhoto'),
     editPhotoBtn:       $('editPhotoBtn'),
     genderRadios:       document.querySelectorAll('input[name="gender"]'),
     presetsGrid:        $('presetsGrid'),
+    destinationsScroll: document.querySelector('.destinations-scroll'),
     generateBtn:        $('generateBtn'),
     selectedDestName:   $('selectedDestinationName'),
 
-    // Step 3
+    // Generating
     loadingState:       $('loadingState'),
+    developImg:         $('developImg'),
+    developFlecks:      $('developFlecks'),
+    progressFill:       $('progressFill'),
+    progressPct:        $('progressPct'),
+    checkpoints:        $('checkpoints'),
     loadingHint:        $('loadingHint'),
+    heritageFact:       $('heritageFact'),
+    heritageFactText:   $('heritageFactText'),
+
+    // Reveal
     resultPanel:        $('resultPanel'),
+    waxSeal:            $('waxSeal'),
+    approvedStamp:      $('approvedStamp'),
+    resultFrame:        $('resultFrame'),
     generatedImage:     $('generatedImage'),
     resultLocation:     $('resultLocation'),
+    stampShower:        $('stampShower'),
     newPhotoBtn:        $('newPhotoBtn'),
     downloadBtn:        $('downloadBtn'),
     shareWhatsAppBtn:   $('shareWhatsAppBtn'),
     printBtn:           $('printBtn'),
 
+    // Overlays
+    idleWarning:        $('idleWarning'),
+    idleRing:           $('idleRing'),
+    staySessionBtn:     $('staySessionBtn'),
+    cameraAsleep:       $('cameraAsleep'),
+    wakeCameraBtn:      $('wakeCameraBtn'),
+    staffReset:         $('staffReset'),
+
     toast:              $('toast'),
-    yearSpan:           $('yearSpan'),
 };
 
 // ── Presets ──────────────────────────────────────────────────────
 // Display data only — the actual prompt template + outfit per gender
 // lives server-side in api/generate.js (PRESETS). The client just sends
-// presetId + gender.
+// presetId + gender. `era` and FACTS drive the document/embassy fiction.
 const presets = [
-    { id: 1,  name: 'Khajuraho — Kandariya Mahadev',  description: 'UNESCO-listed Chandela-era sandstone temples',     backgroundUrl: 'assets/backgrounds/jagdambi-temple-kandariya-mahadev-temple.jpg' },
-    { id: 2,  name: 'Khajuraho — Lakshmana Temple',   description: 'The finely carved 10th-century Chandela temple',   backgroundUrl: 'assets/backgrounds/lakshmana-temple-img-9753-hdr.jpg' },
-    { id: 7,  name: 'Sanchi Stupa',                   description: 'UNESCO Buddhist monument with carved toranas',     backgroundUrl: 'assets/backgrounds/sanchi-stupa.jpg' },
-    { id: 3,  name: 'Orchha — Jahangir Mahal',        description: '17th-century Bundela palace, arched courtyards',   backgroundUrl: 'assets/backgrounds/jahangir-mahal-6-copy.jpg' },
-    { id: 4,  name: 'Orchha — Jahangir Gate',         description: 'Monumental Bundela-Mughal archway',                backgroundUrl: 'assets/backgrounds/jahangir-gate-orchha.jpg' },
-    { id: 8,  name: 'Mandu — Jahaz Mahal',            description: 'Ship Palace of the Royal Enclave, monsoon mood',   backgroundUrl: 'assets/backgrounds/jahaz-mahal-mandu.jpg' },
-    { id: 6,  name: 'Maheshwar — Chhatri by the River', description: 'Holkar cenotaphs above the Narmada ghats',       backgroundUrl: 'assets/backgrounds/chattei-river-view-7.jpg' },
-    { id: 9,  name: 'Krishnabai Holkar Chhatri',      description: "The queen's cenotaph above the Narmada, Maheshwar", backgroundUrl: 'assets/backgrounds/krishnabai-holkar-chhatri.jpg' },
-    { id: 10, name: 'Indore — Rajwada Palace',        description: 'The seven-storey Holkar palace of Indore',         backgroundUrl: 'assets/backgrounds/rajwada-indore.jpg' },
-    { id: 11, name: 'Indore — Rajwada Courtyard',     description: 'Inside the Holkar royal seat',                     backgroundUrl: 'assets/backgrounds/rajwada-15.jpg' },
-    { id: 14, name: 'Bandhavgarh — Shesh Shaiya',     description: 'Reclining Vishnu in deep Bandhavgarh jungle',      backgroundUrl: 'assets/backgrounds/shesh-shaiya-bandhavgarh.jpg' },
-    { id: 12, name: 'Kheoni Sanctuary — Wilds of MP', description: 'Central Indian teak and sal forest',               backgroundUrl: 'assets/backgrounds/kheoni-wildlife-sanctuary.jpg', genders: ['male'] },
-    { id: 13, name: 'Kheoni Sanctuary — Forest Trail', description: 'Quiet woodland of teak, sal and bamboo',          backgroundUrl: 'assets/backgrounds/kheoni-wildlife-sanctuary-1.jpg', genders: ['male'] },
+    { id: 1,  name: 'Khajuraho — Kandariya Mahadev',  era: 'Chandela · 11th c.',     description: 'UNESCO-listed Chandela-era sandstone temples',     backgroundUrl: 'assets/backgrounds/jagdambi-temple-kandariya-mahadev-temple.jpg' },
+    { id: 2,  name: 'Khajuraho — Lakshmana Temple',   era: 'Chandela · 10th c.',     description: 'The finely carved 10th-century Chandela temple',   backgroundUrl: 'assets/backgrounds/lakshmana-temple-img-9753-hdr.jpg' },
+    { id: 7,  name: 'Sanchi Stupa',                   era: 'Mauryan · 3rd c. BCE',   description: 'UNESCO Buddhist monument with carved toranas',     backgroundUrl: 'assets/backgrounds/sanchi-stupa.jpg' },
+    { id: 3,  name: 'Orchha — Jahangir Mahal',        era: 'Bundela · 17th c.',      description: '17th-century Bundela palace, arched courtyards',   backgroundUrl: 'assets/backgrounds/jahangir-mahal-6-copy.jpg' },
+    { id: 4,  name: 'Orchha — Jahangir Gate',         era: 'Bundela–Mughal · 17th c.', description: 'Monumental Bundela-Mughal archway',              backgroundUrl: 'assets/backgrounds/jahangir-gate-orchha.jpg' },
+    { id: 8,  name: 'Mandu — Jahaz Mahal',            era: 'Malwa Sultanate · 15th c.', description: 'Ship Palace of the Royal Enclave, monsoon mood', backgroundUrl: 'assets/backgrounds/jahaz-mahal-mandu.jpg' },
+    { id: 6,  name: 'Maheshwar — Chhatri by the River', era: 'Holkar · 18th c.',     description: 'Holkar cenotaphs above the Narmada ghats',         backgroundUrl: 'assets/backgrounds/chattei-river-view-7.jpg' },
+    { id: 9,  name: 'Krishnabai Holkar Chhatri',      era: 'Holkar · 18th–19th c.',  description: "The queen's cenotaph above the Narmada, Maheshwar", backgroundUrl: 'assets/backgrounds/krishnabai-holkar-chhatri.jpg' },
+    { id: 10, name: 'Indore — Rajwada Palace',        era: 'Holkar · 18th c.',       description: 'The seven-storey Holkar palace of Indore',         backgroundUrl: 'assets/backgrounds/rajwada-indore.jpg' },
+    { id: 11, name: 'Indore — Rajwada Courtyard',     era: 'Holkar · 18th c.',       description: 'Inside the Holkar royal seat',                     backgroundUrl: 'assets/backgrounds/rajwada-15.jpg' },
+    { id: 14, name: 'Bandhavgarh — Shesh Shaiya',     era: 'Kalachuri · 10th c.',    description: 'Reclining Vishnu in deep Bandhavgarh jungle',      backgroundUrl: 'assets/backgrounds/shesh-shaiya-bandhavgarh.jpg' },
+    { id: 12, name: 'Kheoni Sanctuary — Wilds of MP', era: 'Central Indian forest',  description: 'Central Indian teak and sal forest',               backgroundUrl: 'assets/backgrounds/kheoni-wildlife-sanctuary.jpg', genders: ['male'] },
+    { id: 13, name: 'Kheoni Sanctuary — Forest Trail', era: 'Central Indian forest', description: 'Quiet woodland of teak, sal and bamboo',           backgroundUrl: 'assets/backgrounds/kheoni-wildlife-sanctuary-1.jpg', genders: ['male'] },
 ];
 
-// ── Branding overlay ────────────────────────────────────────────
-// Two circular logos are composited onto the generated image client-side
-// via canvas: DAAMS (Madhya Pradesh Directorate of Archaeology) top-left,
-// Aakhon Dekha top-right. The bottom caption shows the actual heritage
-// location of the photo. Deterministic, no model involvement.
+// One DAAMS-flavoured heritage fact per site — shown during the wait.
+const FACTS = {
+    1:  'The Kandariya Mahadev is the largest and most ornate of the Khajuraho temples, raised around 1025–1050 CE by the Chandela kings and dedicated to Shiva.',
+    2:  'The Lakshmana Temple (c. 930–950 CE) is one of the earliest and most complete Chandela temples at Khajuraho, dedicated to Vishnu.',
+    7:  'The Great Stupa at Sanchi was commissioned by Emperor Ashoka in the 3rd century BCE — among the oldest stone structures in India.',
+    3:  "Orchha's Jahangir Mahal was built by the Bundela king Bir Singh Deo to honour a visit by the Mughal emperor Jahangir.",
+    4:  'The monumental Jahangir Gate marks the grand Bundela–Mughal architecture of Orchha, on the banks of the Betwa.',
+    8:  "Mandu's Jahaz Mahal — the 'Ship Palace' — seems to float between two lakes, built in the 15th century during the Malwa Sultanate.",
+    6:  'Maheshwar was the capital of the revered queen Ahilyabai Holkar; its riverside chhatris honour the Holkar rulers.',
+    9:  'This cenotaph above the Narmada at Maheshwar memorialises a Holkar queen, in the dynasty’s signature riverside style.',
+    10: "Indore's seven-storey Rajwada palace, begun around 1747, was the seat of the Holkar dynasty.",
+    11: 'Inside the Rajwada, the Holkar royal courtyard blends Maratha, Mughal and French architectural influences.',
+    14: 'Deep in Bandhavgarh, a 10th-century reclining Vishnu (Shesh Shaiya) rests at the foot of the ancient hill fort.',
+    12: "Kheoni Wildlife Sanctuary protects the teak and sal forests of central India's Malwa plateau.",
+    13: 'The quiet teak, sal and bamboo woodlands of Kheoni shelter deer, leopard and a wealth of birdlife.',
+};
+
+// ── Branding overlay (UNCHANGED pipeline) ───────────────────────
 const BRAND_LOGO_LEFT_SRC  = 'assets/brand/daams-logo.png';
 const BRAND_LOGO_RIGHT_SRC = 'assets/brand/aakhon-dekha-final.png';
 
@@ -140,17 +184,17 @@ function preloadBrandLogos() {
 function init() {
     setCapturePhase('face');
     renderDestinations();
+    populateVisaDrift();
     wireEvents();
+    wireFeedback();
     loadCameraDevices();
     checkHealth();
     preloadBrandLogos();
     fetchUsageCounts();
-    if (el.yearSpan) el.yearSpan.textContent = new Date().getFullYear();
+    maybeStartMirror();
+    setScreen('attract');
 }
 
-// Pulls the per-background usage counts and re-renders the destinations so
-// the count badge appears on each card. Silent on failure — the counts are
-// a nice-to-have, the app works fine without them.
 async function fetchUsageCounts() {
     try {
         const r = await fetch('/api/usage');
@@ -158,45 +202,161 @@ async function fetchUsageCounts() {
         if (data && data.counts) {
             state.usageCounts = data.counts;
             renderDestinations();
+            animateUsageTicker(Object.values(data.counts).reduce((a, b) => a + (Number(b) || 0), 0));
         }
-    } catch (_) { /* silent */ }
+    } catch (_) { /* silent — counts are a nice-to-have */ }
+}
+
+function animateUsageTicker(total) {
+    if (!el.usageCount || !total) return;
+    const dur = 1100, t0 = performance.now();
+    const tick = (now) => {
+        const p = Math.min(1, (now - t0) / dur);
+        const eased = 1 - Math.pow(1 - p, 3);
+        el.usageCount.textContent = Math.round(total * eased).toLocaleString('en-IN');
+        if (p < 1) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
 }
 
 async function checkHealth() {
     try {
         const r = await fetch('/api/health');
         const data = await r.json();
-        if (!data.apiKeyConfigured) {
-            toast('Running in mock mode — no API key configured.', 'error', 5000);
-        }
-    } catch (_) { /* silent; user will see failures when they generate */ }
+        if (!data.apiKeyConfigured && el.demoRibbon) el.demoRibbon.hidden = false;
+    } catch (_) { /* silent */ }
+}
+
+// Drifting "issued visas" behind the closed passport (heritage backgrounds).
+function populateVisaDrift() {
+    if (!el.visaDrift) return;
+    const picks = presets.slice().sort(() => 0.5 - Math.random()).slice(0, 5);
+    el.visaDrift.innerHTML = '';
+    picks.forEach((p, i) => {
+        const card = document.createElement('div');
+        card.className = 'visa-drift__card';
+        const left = 6 + (i * 19) + (Math.random() * 8 - 4);
+        const dur = 16 + Math.random() * 10;
+        const delay = i * 3.2;
+        const rot = (Math.random() * 10 - 5).toFixed(1) + 'deg';
+        card.style.cssText = `left:${left}%;animation-duration:${dur}s;animation-delay:-${delay}s;--rot:${rot};`;
+        card.innerHTML = `<img src="${p.backgroundUrl}" alt="" loading="lazy" />`;
+        el.visaDrift.appendChild(card);
+    });
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  Step navigation
+//  Screen machine
 // ═══════════════════════════════════════════════════════════════
 
+function setScreen(name) {
+    state.screen = name;
+    el.app.dataset.screen = name;
+    armIdle();
+}
+
+// Map the proven step model onto screens so the unchanged pipeline keeps working.
 function goToStep(n) {
-    state.step = n;
+    if (n === 1) setScreen('capture');
+    else if (n === 2) setScreen('choose');
+    else if (n === 3) setScreen('generating');
+}
 
-    // Sections
-    el.stepSections.forEach(section => {
-        const thisStep = Number(section.dataset.step);
-        section.hidden = (thisStep !== n);
-    });
-
-    // Stepper
-    el.stepperItems.forEach(item => {
-        const thisStep = Number(item.dataset.step);
-        item.classList.toggle('is-active', thisStep === n);
-        item.classList.toggle('is-done', thisStep < n);
-    });
-
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+// "Tap to begin" — leave the attract mirror, enter capture, start the camera.
+function startSession() {
+    stopMirror();
+    clearWells();
+    setCapturePhase('face');
+    setScreen('capture');
+    startCamera();
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  Step 1: Camera & capture
+//  Idle timer + hardened privacy reset
+// ═══════════════════════════════════════════════════════════════
+
+const IDLE_TOTAL = { capture: 60000, choose: 60000, reveal: 90000 };
+const IDLE_WARN  = 12000;
+let idleTimer = null, idleWarnTimer = null;
+
+function armIdle() {
+    clearTimeout(idleTimer); clearTimeout(idleWarnTimer);
+    hideIdleWarning();
+    const total = IDLE_TOTAL[state.screen];
+    if (!total) return;                 // no idle reset on attract or while generating
+    idleWarnTimer = setTimeout(showIdleWarning, Math.max(0, total - IDLE_WARN));
+    idleTimer = setTimeout(resetAll, total);
+}
+
+function onActivity() {
+    if (!el.idleWarning.hidden) hideIdleWarning();
+    if (IDLE_TOTAL[state.screen]) armIdle();
+}
+
+function showIdleWarning() {
+    el.idleWarning.hidden = false;
+    const ring = el.idleRing;
+    ring.style.transition = 'none';
+    ring.style.strokeDashoffset = '0';
+    void ring.getBoundingClientRect();   // reflow so the drain animates
+    ring.style.transition = `stroke-dashoffset ${IDLE_WARN}ms linear`;
+    ring.style.strokeDashoffset = '327';
+}
+function hideIdleWarning() { if (el.idleWarning) el.idleWarning.hidden = true; }
+
+function clearAllTimers() {
+    [countdownTimer, loadingHintTimer, progressTimer, factTimer, cameraRetryTimer,
+     idleTimer, idleWarnTimer].forEach(t => { if (t) { clearInterval(t); clearTimeout(t); } });
+    countdownTimer = loadingHintTimer = progressTimer = factTimer = cameraRetryTimer = null;
+    idleTimer = idleWarnTimer = null;
+    ceremonyTimers.forEach(t => clearTimeout(t));
+    ceremonyTimers = [];
+}
+
+// One hardened reset for EVERY exit path (idle, "new visa", error). No face
+// or session data may survive into the next visitor's session.
+function resetAll() {
+    clearAllTimers();
+    stopStream();
+    stopMirror();
+
+    [state.pendingUrl, state.faceUrl, state.bodyUrl].forEach(u => { if (u) URL.revokeObjectURL(u); });
+    state.pendingBlob = state.pendingUrl = null;
+    state.faceBlob = state.faceUrl = state.bodyBlob = state.bodyUrl = null;
+    state.selectedPreset = null;
+    state.selectedGender = null;
+
+    el.genderRadios.forEach(r => { r.checked = false; });
+    el.selectedDestName.textContent = 'Nothing yet';
+    el.generateBtn.disabled = true;
+    el.presetsGrid.querySelectorAll('.destination-card').forEach(c => {
+        c.classList.remove('is-selected');
+        c.setAttribute('aria-checked', 'false');
+    });
+    if (el.destinationsScroll) el.destinationsScroll.classList.remove('is-unlocked');
+
+    if (el.capturedImage) el.capturedImage.removeAttribute('src');
+    if (el.contextPhoto) el.contextPhoto.removeAttribute('src');
+    if (el.generatedImage) el.generatedImage.removeAttribute('src');
+    clearWells();
+    resetCeremony();
+    hideIdleWarning();
+    hideCameraAsleep();
+
+    // dismiss feedback + reset its per-visitor state
+    feedback.submittedThisSession = false;
+    feedback.resetAfterClose = false;
+    if (feedback.overlay) feedback.overlay.hidden = true;
+    resetFeedback();
+
+    setCapturePhase('face');
+    renderDestinations();
+    setScreen('attract');
+    maybeStartMirror();
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  Camera & capture
 // ═══════════════════════════════════════════════════════════════
 
 async function loadCameraDevices() {
@@ -218,7 +378,6 @@ function populateCameraSelect() {
         opt.textContent = d.label || `Camera ${i + 1}`;
         el.cameraSelect.appendChild(opt);
     });
-    // Only show the source selector when there are multiple cameras
     el.cameraSourceField.hidden = state.cameraDevices.length < 2;
 }
 
@@ -243,58 +402,106 @@ async function startCamera() {
         el.captureControls.hidden = false;
         el.captureView.dataset.state = 'live';
         el.captureBtn.disabled = false;
+        el.cameraGuide.dataset.lit = 'true';
+        hideCameraAsleep();
+        stopCameraRetry();
 
-        // Refresh labels (only available after permission granted)
         await loadCameraDevices();
     } catch (err) {
         console.error('Camera error:', err);
-        toast('Could not access the camera. Check permissions.', 'error');
+        showCameraAsleep();
+        if (err && err.name !== 'NotAllowedError') startCameraRetry();
     }
 }
 
 async function handleCameraChange() {
     if (!state.stream) return;
     await startCamera();
-    toast('Camera switched.', 'success');
 }
 
-// Copy per phase, so one capture view serves both the face and body shots.
+// Live mirror in the attract passport cover — ONLY when permission is already
+// granted, so an idle device never throws a permission prompt at a passer-by.
+async function maybeStartMirror() {
+    if (state.screen !== 'attract' && el.app.dataset.screen !== 'attract') return;
+    try {
+        if (!navigator.permissions || !navigator.mediaDevices?.getUserMedia) return;
+        const status = await navigator.permissions.query({ name: 'camera' }).catch(() => null);
+        if (!status || status.state !== 'granted') return;   // silhouette stays
+        state.mirrorStream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 640 } }, audio: false,
+        });
+        if (state.screen !== 'attract') { stopMirror(); return; }   // left attract meanwhile
+        el.mirrorVideo.srcObject = state.mirrorStream;
+        if (el.attractCrest) el.attractCrest.dataset.mirror = 'on';
+    } catch (_) { /* silhouette fallback */ }
+}
+function stopMirror() {
+    if (state.mirrorStream) { state.mirrorStream.getTracks().forEach(t => t.stop()); state.mirrorStream = null; }
+    if (el.attractCrest) el.attractCrest.removeAttribute('data-mirror');
+}
+
+// Camera-asleep overlay (replaces the old dead error toast)
+let cameraRetryTimer = null;
+function showCameraAsleep() {
+    el.cameraPlaceholder.hidden = false;
+    el.cameraAsleep.hidden = false;
+}
+function hideCameraAsleep() { if (el.cameraAsleep) el.cameraAsleep.hidden = true; }
+function startCameraRetry() {
+    stopCameraRetry();
+    cameraRetryTimer = setInterval(() => { if (state.screen === 'capture') startCamera(); }, 4000);
+}
+function stopCameraRetry() { if (cameraRetryTimer) { clearInterval(cameraRetryTimer); cameraRetryTimer = null; } }
+
+// Copy + wells per phase
 const CAPTURE_COPY = {
     face: {
-        phase:  'Photo 1 of 2 · Face close-up',
-        title:  'Smile for the camera',
-        intro:  'A close-up of your face — look straight into the lens, keep your head and shoulders inside the guide.',
-        review: 'How’s your face shot?',
-        next:   'Looks good →',
+        title:  'Identity photo',
+        intro:  'Look straight into the lens.',
+        review: 'Verify your identity photo',
+        guide:  'face',
     },
     body: {
-        phase:  'Photo 2 of 2 · Full body',
-        title:  'Now step back',
-        intro:  'A full-body shot, head to knees — this is used only to match your body type, then discarded.',
-        review: 'How’s your full-body shot?',
-        next:   'Use this →',
+        title:  'Stature photo',
+        intro:  'Step back, head to knees.',
+        review: 'Verify your stature photo',
+        guide:  'body',
     },
 };
 
 function setCapturePhase(phase) {
     state.capturePhase = phase;
     const c = CAPTURE_COPY[phase];
-    el.capturePhaseLabel.textContent = c.phase;
     el.captureTitle.textContent = c.title;
     el.captureIntro.textContent = c.intro;
     el.captureReviewTitle.textContent = c.review;
-    el.toStep2Btn.textContent = c.next;
+    el.cameraGuide.dataset.shape = c.guide;
+
+    // Wells: active vs done/pending
+    if (phase === 'face') {
+        if (el.wellFace.dataset.state !== 'done') el.wellFace.dataset.state = 'active';
+        if (el.wellBody.dataset.state !== 'done') el.wellBody.dataset.state = 'pending';
+    } else {
+        el.wellFace.dataset.state = 'done';
+        el.wellBody.dataset.state = 'active';
+    }
+
     // Back to the live view for the new shot (camera keeps running).
     el.captureReview.hidden = true;
     el.captureView.hidden = false;
 }
 
-// Run a 5-second on-screen countdown, then take the shot — gives the visitor
-// time to pose. Guards against re-entry while a countdown is already running.
+function clearWells() {
+    el.wellFace.dataset.state = 'active';
+    el.wellBody.dataset.state = 'pending';
+    el.wellFaceImg.removeAttribute('src');
+    el.wellBodyImg.removeAttribute('src');
+}
+
 let countdownTimer = null;
 function startCaptureCountdown() {
     if (countdownTimer) return;
-    if (!state.stream) { capturePhoto(); return; } // camera not live yet
+    if (!state.stream) { capturePhoto(); return; }
     el.captureBtn.disabled = true;
     let n = 5;
     const tick = () => {
@@ -305,13 +512,20 @@ function startCaptureCountdown() {
             countdownTimer = null;
             el.captureCountdown.hidden = true;
             el.captureBtn.disabled = false;
+            fireShutterFlash();
             capturePhoto();
             return;
         }
         n -= 1;
     };
-    tick(); // show "5" immediately
+    tick();
     countdownTimer = setInterval(tick, 1000);
+}
+
+function fireShutterFlash() {
+    if (!el.cameraFlash) return;
+    el.cameraFlash.dataset.fire = 'true';
+    setTimeout(() => el.cameraFlash.removeAttribute('data-fire'), 340);
 }
 
 function capturePhoto() {
@@ -319,8 +533,7 @@ function capturePhoto() {
     el.canvas.width = el.webcam.videoWidth;
     el.canvas.height = el.webcam.videoHeight;
 
-    // Mirror horizontally to match the preview, so the saved shot matches what
-    // the user saw when they hit the shutter.
+    // Mirror horizontally to match the preview.
     ctx.save();
     ctx.translate(el.canvas.width, 0);
     ctx.scale(-1, 1);
@@ -333,8 +546,6 @@ function capturePhoto() {
         if (state.pendingUrl) URL.revokeObjectURL(state.pendingUrl);
         state.pendingUrl = URL.createObjectURL(blob);
         el.capturedImage.src = state.pendingUrl;
-
-        // Flip to review state
         el.captureView.hidden = true;
         el.captureReview.hidden = false;
     }, 'image/jpeg', 0.95);
@@ -347,8 +558,6 @@ function retakePhoto() {
     el.captureView.hidden = false;
 }
 
-// "Looks good" on the review screen. Face → advance to the body shot.
-// Body → keep the shot, kick off build classification, and go to step 2.
 async function confirmCaptureAndAdvance() {
     if (!state.pendingBlob) return;
 
@@ -359,22 +568,26 @@ async function confirmCaptureAndAdvance() {
         state.pendingBlob = null;
         state.pendingUrl = null;
         el.contextPhoto.src = state.faceUrl;
+        el.wellFaceImg.src = state.faceUrl;
+        el.wellFace.dataset.state = 'done';
         setCapturePhase('body');
         return;
     }
 
-    // body phase — both shots captured, move on to pick a destination.
+    // body phase — both shots captured.
     state.bodyBlob = state.pendingBlob;
     if (state.bodyUrl) URL.revokeObjectURL(state.bodyUrl);
     state.bodyUrl = state.pendingUrl;
     state.pendingBlob = null;
     state.pendingUrl = null;
+    el.wellBodyImg.src = state.bodyUrl;
+    el.wellBody.dataset.state = 'done';
 
     goToStep(2);
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  Step 2: Destinations
+//  Choose — destinations
 // ═══════════════════════════════════════════════════════════════
 
 function visiblePresets() {
@@ -391,26 +604,24 @@ function renderDestinations() {
         card.setAttribute('aria-checked', state.selectedPreset?.id === p.id ? 'true' : 'false');
         if (state.selectedPreset?.id === p.id) card.classList.add('is-selected');
         card.dataset.presetId = p.id;
-        // Always show the heritage background as the template image.
-        const thumb = p.backgroundUrl;
         const filename = (p.backgroundUrl || '').split('/').pop();
         const count = state.usageCounts[filename] || 0;
+        const permit = p.genders ? `<span class="destination-card__permit">Wilderness permit</span>` : '';
         card.innerHTML = `
             <div class="destination-card__media">
-                <img src="${thumb}" alt="" loading="lazy"
-                     onerror="this.onerror=null;this.src='${p.backgroundUrl}'" />
-                <div class="destination-card__uses" aria-label="Used ${count} times">
+                <img src="${p.backgroundUrl}" alt="" loading="lazy" />
+            </div>
+            <div class="destination-card__stub">
+                <span class="destination-card__era">${escapeHtml(p.era || '')}</span>
+                <span class="destination-card__name">${escapeHtml(p.name)}</span>
+                <span class="destination-card__desc">${escapeHtml(p.description)}</span>
+                <span class="destination-card__uses">
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5Zm0 12.5a5 5 0 1 1 0-10 5 5 0 0 1 0 10Zm0-8a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z"/></svg>
-                    <span>${count}</span>
-                </div>
+                    ${count} stamps
+                </span>
+                ${permit}
             </div>
-            <div class="destination-card__check" aria-hidden="true">
-                <svg viewBox="0 0 24 24"><path fill="currentColor" d="m9.55 17.575-4.95-4.95 1.414-1.414 3.536 3.536 7.07-7.071 1.415 1.414-8.485 8.485Z"/></svg>
-            </div>
-            <div class="destination-card__overlay">
-                <div class="destination-card__name">${escapeHtml(p.name)}</div>
-                <div class="destination-card__desc">${escapeHtml(p.description)}</div>
-            </div>`;
+            <div class="destination-card__select" aria-hidden="true"><span>Selected · चयनित</span></div>`;
         card.addEventListener('click', () => selectDestination(p, card));
         frag.appendChild(card);
     });
@@ -426,6 +637,11 @@ function selectDestination(preset, cardEl) {
         c.setAttribute('aria-checked', isSel ? 'true' : 'false');
     });
     el.selectedDestName.textContent = preset.name;
+    // Pin the chosen card to the top of the stack.
+    if (cardEl && el.presetsGrid.firstElementChild !== cardEl) {
+        el.presetsGrid.prepend(cardEl);
+        if (el.destinationsScroll) el.destinationsScroll.scrollTo({ top: 0, behavior: 'smooth' });
+    }
     updateGenerateEnabled();
 }
 
@@ -433,16 +649,13 @@ function handleGenderChange(e) {
     const value = e.target.value;
     if (value === 'male' || value === 'female') state.selectedGender = value;
 
-    // Re-render destinations so gender-restricted presets disappear / reappear.
+    if (el.destinationsScroll) el.destinationsScroll.classList.add('is-unlocked');
     renderDestinations();
 
-    // If the previously selected preset is no longer visible for this gender,
-    // clear it so the user must pick again.
     if (state.selectedPreset && !visiblePresets().some(p => p.id === state.selectedPreset.id)) {
         state.selectedPreset = null;
         el.selectedDestName.textContent = 'Nothing yet';
     }
-
     updateGenerateEnabled();
 }
 
@@ -455,7 +668,7 @@ function escapeHtml(s) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  Step 3: Generation
+//  Image helpers (UNCHANGED)
 // ═══════════════════════════════════════════════════════════════
 
 async function compressImage(blob, quality = 0.9, maxWidth = 1600) {
@@ -487,16 +700,12 @@ function base64ToBlob(b64, mimeType) {
 function blobToBase64(blob) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
-        reader.onload = () => resolve(reader.result); // data: URL
+        reader.onload = () => resolve(reader.result);
         reader.onerror = reject;
         reader.readAsDataURL(blob);
     });
 }
 
-// Composite the brand logo (top-right, circular badge with white ring) and
-// the bilingual tagline (bottom-center, dark translucent rounded plate)
-// onto the generated photo. Sizes are proportional to the image so the
-// overlay reads the same on any output resolution.
 function drawRoundedRect(ctx, x, y, w, h, r) {
     const radius = Math.min(r, w / 2, h / 2);
     ctx.beginPath();
@@ -508,17 +717,13 @@ function drawRoundedRect(ctx, x, y, w, h, r) {
     ctx.closePath();
 }
 
-// Wait for the Eczar webfont to load before drawing — otherwise the canvas
-// silently substitutes a default font and the typography won't match the UI.
 async function ensureBrandFonts(captionSize) {
     if (!document.fonts || !document.fonts.load) return;
     try {
         await document.fonts.load(`700 ${captionSize}px "Eczar"`);
-    } catch (_) { /* fall back to system fonts if Google Fonts fails */ }
+    } catch (_) { /* fall back to system fonts */ }
 }
 
-// Each new logo is already designed as a circle with its own border/canvas,
-// so we clip+draw without an outer white ring and let the design speak.
 function drawCircularLogo(ctx, logo, cx, cy, diameter) {
     if (!logo) return;
     const r = diameter / 2;
@@ -543,11 +748,8 @@ async function brandifyImage(dataUrl, locationName) {
     canvas.height = H;
     const ctx = canvas.getContext('2d');
 
-    // 1. Base photo
     ctx.drawImage(photo, 0, 0, W, H);
 
-    // 2. Two mirrored circular logo badges — DAAMS top-left, Aakhon Dekha
-    //    top-right. Same diameter, same vertical inset.
     const badgeD = Math.round(W * 0.11);
     const badgeR = badgeD / 2;
     const inset  = Math.round(W * 0.03);
@@ -555,8 +757,6 @@ async function brandifyImage(dataUrl, locationName) {
     const cxLeft  = inset + badgeR;
     const cxRight = W - inset - badgeR;
 
-    // Soft drop shadow drawn as a filled disc — gives both logos a
-    // consistent shadow shape regardless of their own transparency.
     const drawShadowDisc = (cx, cy) => {
         ctx.save();
         ctx.shadowColor   = 'rgba(0, 0, 0, 0.45)';
@@ -576,8 +776,6 @@ async function brandifyImage(dataUrl, locationName) {
     if (leftLogo)  drawCircularLogo(ctx, leftLogo,  cxLeft,  cyTop, badgeD);
     if (rightLogo) drawCircularLogo(ctx, rightLogo, cxRight, cyTop, badgeD);
 
-    // 3. Bottom caption — the actual heritage location of the photo, in
-    //    Eczar Bold, on a soft dark gradient fade.
     const caption = (locationName || '').trim();
     if (caption) {
         const captionSize = Math.max(16, Math.round(H * 0.022));
@@ -586,7 +784,6 @@ async function brandifyImage(dataUrl, locationName) {
         const fontStack   = '"Eczar", "Tiro Devanagari Hindi", "Noto Serif Devanagari", "Kohinoor Devanagari", "Mangal", "Nirmala UI", Georgia, serif';
         const captionFont = `700 ${captionSize}px ${fontStack}`;
 
-        // 3a. Gradient fade so text reads on any background
         const gradHeight = Math.round(H * 0.18);
         const gradTop    = H - gradHeight;
         const gradient   = ctx.createLinearGradient(0, gradTop, 0, H);
@@ -598,7 +795,6 @@ async function brandifyImage(dataUrl, locationName) {
         ctx.fillRect(0, gradTop, W, gradHeight);
         ctx.restore();
 
-        // 3b. Caption text with drop shadow
         const captionY = H - Math.round(H * 0.05);
         ctx.save();
         ctx.font          = captionFont;
@@ -615,27 +811,118 @@ async function brandifyImage(dataUrl, locationName) {
     return canvas.toDataURL('image/jpeg', 0.95);
 }
 
-const LOADING_HINTS = [
-    'Setting the scene…',
-    'Tailoring your outfit…',
-    'Matching light and shadows…',
-    'Perfecting your likeness…',
-    'Adding the final touches…',
-    'Almost there…',
+// ═══════════════════════════════════════════════════════════════
+//  Generating — the entertaining 60–90s wait
+// ═══════════════════════════════════════════════════════════════
+
+const CHECKPOINTS = [
+    'Identity verified',
+    'Era locked',
+    'Tailoring period attire · पोशाक',
+    'Matching the light',
+    'Stitching you into stone',
+    "Awaiting the ambassador's seal · लगभग तैयार",
 ];
+
 let loadingHintTimer = null;
-function startLoadingHints() {
+let progressTimer = null;
+let factTimer = null;
+let progressVal = 0;
+
+function startGenerating() {
+    setScreen('generating');
+    el.heritageFact.hidden = true;
+
+    // The destination develops blurred-sepia → sharp behind the loader.
+    if (state.selectedPreset) {
+        el.developImg.style.backgroundImage = `url("${state.selectedPreset.backgroundUrl}")`;
+    }
+    el.developImg.removeAttribute('data-develop');
+    requestAnimationFrame(() => requestAnimationFrame(() => { el.developImg.dataset.develop = 'true'; }));
+    spawnFlecks();
+
+    renderCheckpoints();
+    startProgress();
+    startCheckpointCycle();
+    scheduleFact();
+}
+
+function spawnFlecks() {
+    if (!el.developFlecks) return;
+    el.developFlecks.innerHTML = '';
+    for (let i = 0; i < 16; i++) {
+        const f = document.createElement('span');
+        f.className = 'fleck';
+        f.style.cssText = `left:${Math.random() * 100}%;animation-duration:${3 + Math.random() * 4}s;animation-delay:-${Math.random() * 5}s;`;
+        el.developFlecks.appendChild(f);
+    }
+}
+
+function renderCheckpoints() {
+    el.checkpoints.innerHTML = '';
+    CHECKPOINTS.forEach((label, i) => {
+        const li = document.createElement('li');
+        li.className = 'checkpoint' + (i === 0 ? ' is-active' : '');
+        li.dataset.i = i;
+        li.innerHTML = `<span class="checkpoint__tick">${i + 1}</span><span class="checkpoint__label">${escapeHtml(label)}</span>`;
+        el.checkpoints.appendChild(li);
+    });
+    el.loadingHint.textContent = CHECKPOINTS[0];
+}
+
+function startCheckpointCycle() {
     let i = 0;
-    el.loadingHint.textContent = LOADING_HINTS[0];
+    el.loadingHint.textContent = CHECKPOINTS[0];
     loadingHintTimer = setInterval(() => {
-        i = (i + 1) % LOADING_HINTS.length;
-        el.loadingHint.textContent = LOADING_HINTS[i];
-    }, 4500);
+        const items = el.checkpoints.querySelectorAll('.checkpoint');
+        if (i < items.length) { items[i].classList.remove('is-active'); items[i].classList.add('is-done'); }
+        i += 1;
+        if (i >= items.length) { i = items.length - 1; return; }   // hold on the last
+        items[i].classList.add('is-active');
+        el.loadingHint.textContent = CHECKPOINTS[i];
+    }, 12000);
 }
-function stopLoadingHints() {
-    clearInterval(loadingHintTimer);
-    loadingHintTimer = null;
+
+// Honest progress: asymptote toward ~92% and HOLD until /api/generate resolves.
+function startProgress() {
+    progressVal = 0;
+    setProgressUI(0);
+    progressTimer = setInterval(() => {
+        progressVal += (92 - progressVal) * 0.045;
+        if (progressVal > 91.5) progressVal = 91.5;
+        setProgressUI(progressVal);
+    }, 650);
 }
+function setProgressUI(v) {
+    el.progressFill.style.width = v + '%';
+    el.progressPct.textContent = Math.round(v) + '%';
+}
+function finishProgress() {
+    if (progressTimer) { clearInterval(progressTimer); progressTimer = null; }
+    progressVal = 100;
+    setProgressUI(100);
+    el.checkpoints.querySelectorAll('.checkpoint').forEach(c => { c.classList.remove('is-active'); c.classList.add('is-done'); });
+}
+
+function scheduleFact() {
+    const id = state.selectedPreset?.id;
+    const fact = id && FACTS[id];
+    if (!fact) return;
+    factTimer = setTimeout(() => {
+        el.heritageFactText.textContent = fact;
+        el.heritageFact.hidden = false;
+    }, 26000);
+}
+
+function stopGeneratingTimers() {
+    if (loadingHintTimer) { clearInterval(loadingHintTimer); loadingHintTimer = null; }
+    if (progressTimer) { clearInterval(progressTimer); progressTimer = null; }
+    if (factTimer) { clearTimeout(factTimer); factTimer = null; }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  Generate (network contract UNCHANGED)
+// ═══════════════════════════════════════════════════════════════
 
 async function generate() {
     if (!state.faceBlob || !state.selectedPreset || !state.selectedGender) {
@@ -643,22 +930,18 @@ async function generate() {
         return;
     }
 
-    goToStep(3);
-    el.loadingState.hidden = false;
-    el.resultPanel.hidden = true;
-    startLoadingHints();
+    startGenerating();
 
     try {
-        // Compress and encode both shots as data URLs. We send JSON (not
-        // multipart) because Vercel mangles multipart bodies → "Unexpected end
-        // of form". Sizes kept modest so two base64 images fit the body limit.
         const userImg = await compressImage(state.faceBlob, 0.92, 1600);
         const bodyImg = state.bodyBlob ? await compressImage(state.bodyBlob, 0.85, 1024) : null;
         const userImageDataUrl = await blobToBase64(userImg);
         const bodyImageDataUrl = bodyImg ? await blobToBase64(bodyImg) : null;
 
-        // Stage 1 — GPT Image 2 generates the scene from the face (Image 1),
-        // the full-body shot (Image 2 → body type), and the heritage background.
+        // Free the camera GPU/heat while the embassy "processes" — capture
+        // blobs are already saved, so stopping the stream here is safe.
+        stopStream();
+
         const genRes = await fetch('/api/generate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -674,9 +957,6 @@ async function generate() {
             throw new Error(genData.details || genData.error || 'Generation failed');
         }
 
-        // GPT Image 2 is the whole pipeline now — it renders the person (face +
-        // body) into the scene directly. No face-swap step: it was making faces
-        // look stiff/over-processed, and the native render reads more natural.
         const rawDataUrl = `data:${genData.mimeType};base64,${genData.generatedImage}`;
         let finalDataUrl;
         try {
@@ -685,23 +965,73 @@ async function generate() {
             console.warn('Brand overlay failed, falling back to raw image:', overlayErr);
             finalDataUrl = rawDataUrl;
         }
-        el.generatedImage.src = finalDataUrl;
-        el.resultLocation.textContent = state.selectedPreset.name;
-        el.loadingState.hidden = true;
-        el.resultPanel.hidden = false;
+
+        finishProgress();
+        showReveal(finalDataUrl, state.selectedPreset.name);
 
         if (genData.note) toast(genData.note, 'error', 6000);
-        else toast('Your photo is ready!', 'success');
     } catch (err) {
         console.error(err);
-        toast(err.message || 'Generation failed. Please try again.', 'error', 6000);
-        // On failure, return to step 2 so the user can retry
-        el.loadingState.hidden = true;
+        stopGeneratingTimers();
+        toast('Visa delayed — let’s try again. · फिर से कोशिश करें', 'error', 6000);
+        // bounce back to Choose with selections intact
         goToStep(2);
     } finally {
-        stopLoadingHints();
+        stopGeneratingTimers();
     }
 }
+
+// ═══════════════════════════════════════════════════════════════
+//  Reveal — the wax-seal ceremony
+// ═══════════════════════════════════════════════════════════════
+
+let ceremonyTimers = [];
+function laterC(fn, ms) { const t = setTimeout(fn, ms); ceremonyTimers.push(t); return t; }
+
+function resetCeremony() {
+    ceremonyTimers.forEach(t => clearTimeout(t));
+    ceremonyTimers = [];
+    if (el.waxSeal) el.waxSeal.removeAttribute('data-phase');
+    if (el.approvedStamp) el.approvedStamp.removeAttribute('data-show');
+    if (el.resultFrame) el.resultFrame.removeAttribute('data-show');
+    if (el.stampShower) el.stampShower.innerHTML = '';
+    if (el.generatedImage) el.generatedImage.classList.remove('is-developing');
+}
+
+function showReveal(finalDataUrl, locationName) {
+    resetCeremony();
+    el.generatedImage.classList.add('is-developing');
+    el.generatedImage.src = finalDataUrl;
+    el.resultLocation.textContent = locationName;
+    setScreen('reveal');
+
+    // Seal drops, cracks, photo develops out of the fog.
+    el.waxSeal.dataset.phase = 'drop';
+    laterC(() => { el.waxSeal.dataset.phase = 'crack'; el.approvedStamp.dataset.show = 'true'; }, 620);
+    laterC(() => {
+        el.resultFrame.dataset.show = 'true';
+        el.generatedImage.classList.remove('is-developing');   // sharpen last
+    }, 1000);
+    laterC(() => { el.approvedStamp.removeAttribute('data-show'); spawnStampShower(); toast('Your visa is ready! · वीज़ा स्वीकृत', 'success'); }, 1700);
+}
+
+function spawnStampShower() {
+    if (!el.stampShower) return;
+    el.stampShower.innerHTML = '';
+    const glyphs = ['✦', '✶', '❋', '✷', '●'];
+    for (let i = 0; i < 22; i++) {
+        const s = document.createElement('span');
+        s.className = 'stamp-glyph';
+        s.textContent = glyphs[i % glyphs.length];
+        s.style.cssText = `left:${Math.random() * 100}%;animation-duration:${1.6 + Math.random() * 1.8}s;animation-delay:${Math.random() * 0.6}s;font-size:${0.9 + Math.random()}rem;`;
+        el.stampShower.appendChild(s);
+    }
+    laterC(() => { if (el.stampShower) el.stampShower.innerHTML = ''; }, 3600);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  Share / download (UNCHANGED behaviour)
+// ═══════════════════════════════════════════════════════════════
 
 function download() {
     if (!el.generatedImage.src) return;
@@ -714,10 +1044,6 @@ function download() {
     a.remove();
 }
 
-// Share to WhatsApp via the Web Share API (mobile — opens the native share
-// sheet where the user picks WhatsApp). On desktop, falls back to opening
-// WhatsApp Web with a prefilled text message and triggers a download so the
-// user can attach it manually, since wa.me URLs can't carry image payloads.
 async function shareWhatsApp() {
     if (!el.generatedImage.src) return;
     const locationName = state.selectedPreset?.name || 'the AI Photobooth';
@@ -733,38 +1059,15 @@ async function shareWhatsApp() {
             return;
         }
 
-        // Desktop fallback — trigger a download and open WhatsApp Web with text.
         download();
         const url = `https://web.whatsapp.com/send?text=${encodeURIComponent(caption)}`;
         window.open(url, '_blank');
         toast('Image downloaded. Attach it in the WhatsApp window that just opened.', '', 5500);
     } catch (err) {
-        if (err.name === 'AbortError') return; // user dismissed the share sheet
+        if (err.name === 'AbortError') return;
         console.error('WhatsApp share failed:', err);
         toast('Share failed — try downloading and sending manually.', 'error');
     }
-}
-
-// ═══════════════════════════════════════════════════════════════
-//  Reset
-// ═══════════════════════════════════════════════════════════════
-
-function resetAll() {
-    retakePhoto();
-    // Clear both captures and start the camera flow over at the face shot.
-    [state.faceUrl, state.bodyUrl].forEach(u => { if (u) URL.revokeObjectURL(u); });
-    state.faceBlob = state.faceUrl = state.bodyBlob = state.bodyUrl = null;
-    state.selectedPreset = null;
-    state.selectedGender = null;
-    el.presetsGrid.querySelectorAll('.destination-card').forEach(c => {
-        c.classList.remove('is-selected');
-        c.setAttribute('aria-checked', 'false');
-    });
-    el.genderRadios.forEach(r => { r.checked = false; });
-    el.selectedDestName.textContent = 'Nothing yet';
-    el.generateBtn.disabled = true;
-    setCapturePhase('face');
-    goToStep(1);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -784,6 +1087,8 @@ function toast(message, type = '', duration = 3200) {
 // ═══════════════════════════════════════════════════════════════
 
 function wireEvents() {
+    el.beginBtn.addEventListener('click', startSession);
+
     el.startCameraBtn.addEventListener('click', startCamera);
     el.cameraSelect.addEventListener('change', handleCameraChange);
     el.captureBtn.addEventListener('click', startCaptureCountdown);
@@ -792,52 +1097,53 @@ function wireEvents() {
 
     el.editPhotoBtn.addEventListener('click', () => {
         retakePhoto();
+        clearWells();
         setCapturePhase('face');
-        goToStep(1);
+        setScreen('capture');
+        if (!state.stream) startCamera();
     });
 
     el.genderRadios.forEach(r => r.addEventListener('change', handleGenderChange));
-
     el.generateBtn.addEventListener('click', generate);
 
-    // "Start over" — if the user hasn't given feedback yet this session,
-    // surface the popup first; resetAll then runs after they close it
-    // (handled inside closeFeedback). Otherwise just reset right away.
+    // Reveal actions — feedback rides in after the user acts on the image.
     el.newPhotoBtn.addEventListener('click', () => {
-        if (feedback.submittedThisSession || !feedback.overlay) {
-            resetAll();
-            return;
-        }
+        if (feedback.submittedThisSession || !feedback.overlay) { resetAll(); return; }
         feedback.resetAfterClose = true;
         openFeedback();
     });
-    // The feedback popup surfaces whenever the user takes a post-generation
-    // action (download, share, print) — i.e. they've used the image.
     el.downloadBtn.addEventListener('click', () => { download(); openFeedback(); });
     el.shareWhatsAppBtn.addEventListener('click', () => { shareWhatsApp(); openFeedback(); });
     el.printBtn.addEventListener('click', () => { window.print(); openFeedback(); });
 
-    wireFeedback();
+    // Overlays
+    el.staySessionBtn.addEventListener('click', () => { hideIdleWarning(); armIdle(); });
+    el.wakeCameraBtn.addEventListener('click', startCamera);
+
+    // Idle activity — any touch keeps the session alive.
+    ['pointerdown', 'touchstart', 'keydown'].forEach(ev =>
+        document.addEventListener(ev, onActivity, { passive: true }));
+
+    // Hidden staff force-reset: long-press the bottom-left corner for 3s.
+    let staffTimer = null;
+    const startStaff = () => { staffTimer = setTimeout(resetAll, 3000); };
+    const cancelStaff = () => { if (staffTimer) { clearTimeout(staffTimer); staffTimer = null; } };
+    el.staffReset.addEventListener('pointerdown', startStaff);
+    el.staffReset.addEventListener('pointerup', cancelStaff);
+    el.staffReset.addEventListener('pointerleave', cancelStaff);
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  Feedback (post-generation star rating, persisted to Firestore)
+//  Feedback — "Border Exit Survey" (persisted to Firestore, UNCHANGED API)
 // ═══════════════════════════════════════════════════════════════
 
 const feedback = {
-    overlay: null,
-    panel: null,
-    submitBtn: null,
-    skipBtn: null,
-    closeBtn: null,
-    thanks: null,
+    overlay: null, panel: null, submitBtn: null, skipBtn: null, closeBtn: null, thanks: null,
     ratings: { rating1: 0, rating2: 0 },
     submittedThisSession: false,
     resetAfterClose: false,
 };
 
-// Stable anonymous user id so admin can spot repeat submitters without
-// us collecting any personal data.
 function getAnonId() {
     try {
         const k = 'ai-photobooth-anon-id';
@@ -852,7 +1158,6 @@ function getAnonId() {
     } catch (_) { return null; }
 }
 
-// Downscale a data URL to a small JPEG thumbnail for the feedback record.
 function dataUrlToThumbnail(dataUrl, maxWidth = 600, quality = 0.75) {
     return new Promise((resolve, reject) => {
         if (!dataUrl) return resolve(null);
@@ -895,12 +1200,8 @@ function wireFeedback() {
     feedback.submitBtn.addEventListener('click', submitFeedback);
     feedback.skipBtn.addEventListener('click', skipFeedback);
     feedback.closeBtn.addEventListener('click', closeFeedback);
-    feedback.overlay.addEventListener('click', (e) => {
-        if (e.target === feedback.overlay) closeFeedback();
-    });
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && !feedback.overlay.hidden) closeFeedback();
-    });
+    feedback.overlay.addEventListener('click', (e) => { if (e.target === feedback.overlay) closeFeedback(); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !feedback.overlay.hidden) closeFeedback(); });
 }
 
 function openFeedback() {
@@ -927,10 +1228,7 @@ function resetFeedback() {
     feedback.ratings.rating2 = 0;
     feedback.panel.classList.remove('is-submitted');
     feedback.panel.querySelectorAll('.rating').forEach(g => g.removeAttribute('data-value'));
-    if (feedback.thanks) {
-        feedback.thanks.hidden = true;
-        feedback.thanks.textContent = 'Thank you for your feedback! ✨';
-    }
+    if (feedback.thanks) { feedback.thanks.hidden = true; }
     feedback.submitBtn.disabled = true;
     feedback.submitBtn.textContent = 'Send feedback';
 }
@@ -987,4 +1285,3 @@ if (document.readyState === 'loading') {
 } else {
     init();
 }
-

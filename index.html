@@ -2,68 +2,127 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <meta name="theme-color" content="#a63e1e" />
-    <title>AI Photobooth — Madhya Pradesh Heritage</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#1c1510" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <title>Time-Traveller's Passport — Madhya Pradesh Heritage</title>
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Eczar:wght@400;500;700&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600&display=swap" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Eczar:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=Space+Mono:wght@400;700&family=Tiro+Devanagari+Hindi&display=swap" />
     <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-    <header class="site-header">
-        <div class="site-header__inner">
-            <div class="wordmark">
-                <span class="wordmark__mark" aria-hidden="true"></span>
-                <span class="wordmark__text">
-                    <span class="wordmark__title">AI Photobooth</span>
-                    <span class="wordmark__subtitle">Madhya Pradesh Heritage</span>
-                </span>
+    <!-- ══════════════════════════════════════════════════════════════
+         Samay Yatra — The Heritage Time-Visa
+         A walk-up iPad-portrait kiosk. One fixed frame, six screen
+         layers toggled by data-screen on #app. Every id that app.js
+         binds to is preserved inside the new passport markup.
+         ═════════════════════════════════════════════════════════════ -->
+    <div id="app" data-screen="attract">
+
+        <!-- Shared hidden capture canvas (used by capturePhoto) -->
+        <canvas id="canvas" hidden></canvas>
+
+        <!-- ═══ Screen: ATTRACT ═══ -->
+        <section class="screen screen--attract" data-screen="attract" aria-label="Welcome">
+            <div class="embassy-stage" aria-hidden="true">
+                <span class="safelight"></span>
+                <div class="visa-drift" id="visaDrift"></div>
             </div>
-        </div>
-    </header>
 
-    <nav class="stepper" aria-label="Progress">
-        <ol class="stepper__track">
-            <li class="stepper__item is-active" data-step="1">
-                <span class="stepper__dot">1</span>
-                <span class="stepper__label">Capture</span>
-            </li>
-            <li class="stepper__item" data-step="2">
-                <span class="stepper__dot">2</span>
-                <span class="stepper__label">Choose destination</span>
-            </li>
-            <li class="stepper__item" data-step="3">
-                <span class="stepper__dot">3</span>
-                <span class="stepper__label">Reveal</span>
-            </li>
-        </ol>
-    </nav>
+            <div class="attract-inner">
+                <div class="passport" id="attractPassport">
+                    <div class="passport__foil"></div>
+                    <div class="passport__medallion passport__medallion--top">
+                        <img src="assets/brand/daams-logo.png" alt="Directorate of Archaeology, Archives & Museums, Madhya Pradesh" />
+                    </div>
 
-    <main class="stage">
+                    <div class="passport__crest">
+                        <video id="mirrorVideo" autoplay playsinline muted></video>
+                        <svg class="passport__silhouette" viewBox="0 0 100 100" aria-hidden="true">
+                            <path fill="currentColor" d="M50 18a16 16 0 1 0 0 32 16 16 0 0 0 0-32Zm0 38c-16 0-28 8.4-28 21v5h56v-5c0-12.6-12-21-28-21Z"/>
+                        </svg>
+                        <span class="passport__crest-ring"></span>
+                    </div>
 
-        <!-- ═══ Step 1: Capture ═══ -->
-        <section class="step step--active" data-step="1" aria-labelledby="step1-title">
-            <header class="step__header">
-                <p class="capture-phase" id="capturePhaseLabel">Photo 1 of 2 · Face close-up</p>
-                <h1 id="step1-title">Smile for the camera</h1>
-                <p class="step__intro" id="captureIntro">Look straight into the lens, keep your head and shoulders inside the guide, and capture when ready.</p>
+                    <p class="passport__kicker">मध्य प्रदेश · पुरातत्व</p>
+                    <h1 class="passport__title">Time-Traveller's<br/>Passport</h1>
+                    <p class="passport__sub">Become part of Madhya Pradesh's heritage<br/><span lang="hi">अपनी विरासत तस्वीर बनाइए</span></p>
+
+                    <div class="passport__medallion passport__medallion--bottom">
+                        <img src="assets/brand/aakhon-dekha-final.png" alt="Aakhon Dekha VR Experience Centre" />
+                    </div>
+                </div>
+            </div>
+
+            <div class="attract-foot">
+                <button id="beginBtn" class="boarding-cta" type="button">
+                    <span class="boarding-cta__perf" aria-hidden="true"></span>
+                    <span class="boarding-cta__body">
+                        <svg class="boarding-cta__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a1 1 0 0 1 1 1v8h8a1 1 0 1 1 0 2h-8v8a1 1 0 1 1-2 0v-8H3a1 1 0 1 1 0-2h8V3a1 1 0 0 1 1-1Z"/></svg>
+                        <span class="boarding-cta__text">
+                            <span class="en">Tap to begin</span>
+                            <span class="hi" lang="hi">यात्रा शुरू करें</span>
+                        </span>
+                    </span>
+                    <span class="boarding-cta__perf" aria-hidden="true"></span>
+                </button>
+                <p class="usage-ticker" id="usageTicker" aria-live="off">
+                    <span class="usage-ticker__label">Stamps issued</span>
+                    <span class="usage-ticker__count" id="usageCount">—</span>
+                    <span class="usage-ticker__label" lang="hi">यात्री</span>
+                </p>
+            </div>
+
+            <div class="demo-ribbon" id="demoRibbon" hidden>Demo Booth</div>
+        </section>
+
+        <!-- ═══ Screen: CAPTURE (Immigration / Biometric check-in) ═══ -->
+        <section class="screen screen--capture" data-screen="capture" aria-label="Biometric check-in">
+            <header class="doc-head">
+                <p class="doc-head__office"><span class="doc-stamp-dot"></span>Immigration · <span lang="hi">प्रवेश जाँच</span></p>
+                <h2 class="doc-head__title" id="step1-title">Identity photo</h2>
+                <p class="doc-head__hint" id="captureIntro">Look straight into the lens.</p>
             </header>
 
+            <!-- Two-well checklist — self-justifies the two-photo capture -->
+            <div class="wells" aria-hidden="true">
+                <div class="well" id="wellFace" data-state="active">
+                    <div class="well__photo"><img id="wellFaceImg" alt="" /></div>
+                    <div class="well__meta">
+                        <span class="well__no">Photo 1</span>
+                        <span class="well__name">Identity · <span lang="hi">चेहरा</span></span>
+                    </div>
+                    <span class="well__stamp">Accepted</span>
+                </div>
+                <div class="well" id="wellBody" data-state="pending">
+                    <div class="well__photo"><img id="wellBodyImg" alt="" /></div>
+                    <div class="well__meta">
+                        <span class="well__no">Photo 2</span>
+                        <span class="well__name">Stature · <span lang="hi">पूरा शरीर</span></span>
+                    </div>
+                    <span class="well__stamp">Accepted</span>
+                </div>
+            </div>
+
+            <p class="capture-phase" id="capturePhaseLabel" hidden>Photo 1 of 2</p>
+
+            <!-- Live capture -->
             <div class="capture-view" data-state="idle">
                 <div class="camera-frame">
                     <video id="webcam" autoplay playsinline muted></video>
-                    <canvas id="canvas" hidden></canvas>
                     <div class="camera-frame__placeholder" id="cameraPlaceholder">
                         <svg class="camera-frame__icon" viewBox="0 0 24 24" aria-hidden="true">
                             <path fill="currentColor" d="M9 3 7.5 5H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-3.5L15 3H9Zm3 5a6 6 0 1 1 0 12 6 6 0 0 1 0-12Zm0 2a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z"/>
                         </svg>
-                        <p class="camera-frame__hint">Tap below to start the camera</p>
-                        <button id="startCameraBtn" class="btn btn--primary">Start camera</button>
+                        <p class="camera-frame__hint">Starting the camera…</p>
+                        <button id="startCameraBtn" class="btn btn--ghost btn--on-dark">Enable camera</button>
                     </div>
-                    <div class="camera-frame__guide" aria-hidden="true"></div>
+                    <div class="camera-frame__guide" id="cameraGuide" aria-hidden="true"></div>
                     <div class="capture-countdown" id="captureCountdown" hidden aria-hidden="true"></div>
+                    <div class="camera-frame__flash" id="cameraFlash" aria-hidden="true"></div>
                 </div>
 
                 <div class="capture-controls" id="captureControls" hidden>
@@ -74,129 +133,206 @@
                         </select>
                     </label>
 
-                    <button id="captureBtn" class="btn btn--primary btn--capture" disabled>
-                        <span class="btn__shutter" aria-hidden="true"></span>
-                        <span class="btn__label">Capture photo</span>
+                    <button id="captureBtn" class="shutter" disabled aria-label="Scan photo">
+                        <span class="shutter__ring" aria-hidden="true"></span>
+                        <span class="shutter__core" aria-hidden="true"></span>
+                        <span class="shutter__label">Scan<br/><span lang="hi">खींचिए</span></span>
                     </button>
                 </div>
             </div>
 
+            <!-- Review -->
             <div class="capture-review" id="captureReview" hidden>
-                <h2 id="captureReviewTitle">How's this?</h2>
-                <p class="step__intro" id="captureReviewIntro">If you like it, move on. Otherwise, retake.</p>
+                <h2 class="doc-head__title" id="captureReviewTitle">How's this?</h2>
+                <p class="doc-head__hint" id="captureReviewIntro">Keep it, or scan again.</p>
                 <figure class="capture-review__frame">
                     <img id="capturedImage" alt="Your captured photo" />
+                    <span class="capture-review__verify">Verify? · <span lang="hi">जाँचें</span></span>
                 </figure>
                 <div class="button-row">
-                    <button id="retakeBtn" class="btn btn--ghost">Retake</button>
-                    <button id="toStep2Btn" class="btn btn--primary">Looks good →</button>
+                    <button id="retakeBtn" class="btn btn--ghost btn--xl">
+                        <svg viewBox="0 0 24 24" class="btn__icon" aria-hidden="true"><path fill="currentColor" d="M12 5V2L7 7l5 5V8a5 5 0 1 1-5 5H5a7 7 0 1 0 7-8Z"/></svg>
+                        Retake · <span lang="hi">दोबारा</span>
+                    </button>
+                    <button id="toStep2Btn" class="btn btn--approve btn--xl">
+                        <svg viewBox="0 0 24 24" class="btn__icon" aria-hidden="true"><path fill="currentColor" d="m9.55 17.575-4.95-4.95 1.414-1.414 3.536 3.536 7.07-7.071 1.415 1.414-8.485 8.485Z"/></svg>
+                        Approve · <span lang="hi">मंज़ूर</span>
+                    </button>
                 </div>
             </div>
         </section>
 
-        <!-- ═══ Step 2: Choose destination ═══ -->
-        <section class="step" data-step="2" aria-labelledby="step2-title" hidden>
-            <header class="step__header">
-                <h1 id="step2-title">Choose your destination</h1>
-                <p class="step__intro">Where in Madhya Pradesh would you like to appear?</p>
+        <!-- ═══ Screen: CHOOSE (Visa application) ═══ -->
+        <section class="screen screen--choose" data-screen="choose" aria-label="Visa application">
+            <header class="doc-head doc-head--row">
+                <div>
+                    <p class="doc-head__office"><span class="doc-stamp-dot"></span>Visa Application · <span lang="hi">वीज़ा आवेदन</span></p>
+                    <h2 class="doc-head__title">Choose your era &amp; destination</h2>
+                </div>
+                <button id="editPhotoBtn" class="context-photo" type="button" aria-label="Change your photo">
+                    <img id="contextPhoto" alt="" />
+                    <span class="context-photo__edit">Change</span>
+                </button>
             </header>
 
-            <aside class="selection-context" aria-label="Your captured photo">
-                <img id="contextPhoto" alt="" />
-                <span class="selection-context__label">Your photo</span>
-                <button id="editPhotoBtn" class="selection-context__edit" type="button">Change</button>
-            </aside>
-
-            <fieldset class="gender-toggle" aria-label="Your gender">
-                <legend class="gender-toggle__legend">
-                    <span class="gender-toggle__step">First</span>
-                    <span class="gender-toggle__prompt">Who's in the photo?</span>
+            <fieldset class="traveller" aria-label="Traveller">
+                <legend class="traveller__legend">
+                    <span class="traveller__step">First</span>
+                    <span class="traveller__prompt">Who is travelling? · <span lang="hi">यात्री कौन है?</span></span>
                 </legend>
-                <div class="gender-toggle__options">
-                    <label class="gender-toggle__option">
+                <div class="traveller__options">
+                    <label class="traveller__chip">
                         <input type="radio" name="gender" value="male" />
-                        <span class="gender-toggle__icon" aria-hidden="true">
-                            <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4Zm0 2c-3.3 0-8 1.7-8 5v3h16v-3c0-3.3-4.7-5-8-5Z"/></svg>
+                        <span class="traveller__glyph" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" width="26" height="26"><path fill="currentColor" d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4Zm0 2c-3.3 0-8 1.7-8 5v3h16v-3c0-3.3-4.7-5-8-5Z"/></svg>
                         </span>
-                        <span class="gender-toggle__label">Male</span>
+                        <span class="traveller__label">Male · <span lang="hi">पुरुष</span></span>
                     </label>
-                    <label class="gender-toggle__option">
+                    <label class="traveller__chip">
                         <input type="radio" name="gender" value="female" />
-                        <span class="gender-toggle__icon" aria-hidden="true">
-                            <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M12 2a5 5 0 0 0-1 9.9V14H8v2h3v3h2v-3h3v-2h-3v-2.1A5 5 0 0 0 12 2Zm0 2a3 3 0 1 1-3 3 3 3 0 0 1 3-3Z"/></svg>
+                        <span class="traveller__glyph" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" width="26" height="26"><path fill="currentColor" d="M12 2a5 5 0 0 0-1 9.9V14H8v2h3v3h2v-3h3v-2h-3v-2.1A5 5 0 0 0 12 2Zm0 2a3 3 0 1 1-3 3 3 3 0 0 1 3-3Z"/></svg>
                         </span>
-                        <span class="gender-toggle__label">Female</span>
+                        <span class="traveller__label">Female · <span lang="hi">महिला</span></span>
                     </label>
                 </div>
             </fieldset>
 
-            <div class="destinations" id="presetsGrid" role="radiogroup" aria-label="Heritage destinations">
-                <!-- Populated by app.js -->
+            <div class="destinations-scroll">
+                <div class="destinations" id="presetsGrid" role="radiogroup" aria-label="Heritage destinations">
+                    <!-- boarding-pass cards injected by app.js -->
+                </div>
+                <div class="destinations-lock" id="destinationsLock">
+                    <span class="destinations-lock__stamp">Select traveller<br/><span lang="hi">पहले यात्री चुनें</span></span>
+                </div>
             </div>
 
             <div class="action-bar">
-                <div class="action-bar__inner">
-                    <div class="action-bar__meta">
-                        <span class="action-bar__label">Selected</span>
-                        <span class="action-bar__value" id="selectedDestinationName">Nothing yet</span>
-                    </div>
-                    <button id="generateBtn" class="btn btn--primary btn--large" disabled>
-                        Generate my photo
-                        <svg viewBox="0 0 24 24" class="btn__icon" aria-hidden="true"><path fill="currentColor" d="m9 18 6-6-6-6v12Z"/></svg>
-                    </button>
+                <div class="action-bar__meta">
+                    <span class="action-bar__label">Selected</span>
+                    <span class="action-bar__value" id="selectedDestinationName">Nothing yet</span>
+                </div>
+                <button id="generateBtn" class="btn btn--gold btn--xl" disabled>
+                    Issue my visa · <span lang="hi">वीज़ा जारी करें</span>
+                    <svg viewBox="0 0 24 24" class="btn__icon" aria-hidden="true"><path fill="currentColor" d="m9 18 6-6-6-6v12Z"/></svg>
+                </button>
+            </div>
+        </section>
+
+        <!-- ═══ Screen: GENERATING (Processing at the embassy) ═══ -->
+        <section class="screen screen--generating" data-screen="generating" aria-label="Processing">
+            <div class="embassy-stage" aria-hidden="true"><span class="safelight"></span></div>
+
+            <div class="processing" id="loadingState">
+                <div class="develop-well">
+                    <div class="develop-well__img" id="developImg"></div>
+                    <div class="develop-well__fog"></div>
+                    <div class="develop-well__flecks" id="developFlecks" aria-hidden="true"></div>
+                </div>
+
+                <h2 class="processing__title" id="step3-title">Processing at the embassy</h2>
+                <p class="processing__office" lang="hi">प्रक्रिया जारी है…</p>
+
+                <div class="progress">
+                    <div class="progress__track"><span class="progress__fill" id="progressFill"></span></div>
+                    <span class="progress__pct" id="progressPct">0%</span>
+                </div>
+
+                <ul class="checkpoints" id="checkpoints" aria-hidden="true"></ul>
+                <p class="processing__hint" id="loadingHint"></p>
+
+                <div class="fact-card" id="heritageFact" hidden>
+                    <span class="fact-card__eyebrow">Did you know · <span lang="hi">क्या आप जानते हैं</span></span>
+                    <p class="fact-card__text" id="heritageFactText"></p>
                 </div>
             </div>
         </section>
 
-        <!-- ═══ Step 3: Reveal ═══ -->
-        <section class="step step--reveal" data-step="3" aria-labelledby="step3-title" hidden>
+        <!-- ═══ Screen: REVEAL (Visa approved) ═══ -->
+        <section class="screen screen--reveal" data-screen="reveal" aria-label="Your visa">
+            <div class="embassy-stage embassy-stage--spot" aria-hidden="true"></div>
 
-            <div class="reveal-loading" id="loadingState">
-                <div class="heritage-loader" aria-hidden="true">
-                    <span></span><span></span><span></span>
+            <div class="reveal" id="resultPanel">
+                <!-- Wax-seal ceremony -->
+                <div class="seal" id="waxSeal" aria-hidden="true">
+                    <span class="seal__shock"></span>
+                    <span class="seal__half seal__half--l"></span>
+                    <span class="seal__half seal__half--r"></span>
+                    <span class="seal__crest">
+                        <img src="assets/brand/daams-logo.png" alt="" />
+                    </span>
                 </div>
-                <h1 id="step3-title">Creating your masterpiece</h1>
-                <p class="step__intro">Weaving you into the scene… this usually takes about 60–90 seconds.</p>
-                <p class="reveal-loading__hint" id="loadingHint"></p>
-            </div>
+                <div class="approved-stamp" id="approvedStamp" aria-hidden="true">
+                    Visa Approved<span lang="hi">वीज़ा स्वीकृत</span>
+                </div>
 
-            <div class="reveal-result" id="resultPanel" hidden>
-                <header class="step__header">
-                    <h1>Here you are in <span class="accent" id="resultLocation">your destination</span></h1>
-                </header>
-                <figure class="result-frame">
+                <figure class="result-frame" id="resultFrame">
                     <img id="generatedImage" alt="Your AI-generated heritage photo" />
                 </figure>
-                <div class="button-row button-row--wide">
-                    <button id="newPhotoBtn" class="btn btn--ghost">Start over</button>
-                    <button id="downloadBtn" class="btn btn--secondary">Download</button>
-                    <button id="shareWhatsAppBtn" class="btn btn--secondary">
+                <p class="reveal__banner">Entry granted · <span class="accent" id="resultLocation">your destination</span></p>
+
+                <div class="reveal__actions">
+                    <button id="downloadBtn" class="btn btn--gold btn--xl reveal__act">
+                        <svg viewBox="0 0 24 24" class="btn__icon" aria-hidden="true"><path fill="currentColor" d="M12 3a1 1 0 0 1 1 1v9.586l2.293-2.293 1.414 1.414L12 17.414l-4.707-4.707 1.414-1.414L11 13.586V4a1 1 0 0 1 1-1Zm-7 14a1 1 0 0 1 1 1v1h12v-1a1 1 0 1 1 2 0v3H4v-3a1 1 0 0 1 1-1Z"/></svg>
+                        Save · <span lang="hi">सेव</span>
+                    </button>
+                    <button id="shareWhatsAppBtn" class="btn btn--whatsapp btn--xl reveal__act">
                         <svg viewBox="0 0 24 24" class="btn__icon" aria-hidden="true">
                             <path fill="currentColor" d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.966-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.83 9.83 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.82 11.82 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.88 11.88 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.82 11.82 0 0 0-3.48-8.413Z"/>
                         </svg>
                         WhatsApp
                     </button>
-                    <button id="printBtn" class="btn btn--primary">Print</button>
+                    <button id="printBtn" class="btn btn--ink btn--xl reveal__act">
+                        <svg viewBox="0 0 24 24" class="btn__icon" aria-hidden="true"><path fill="currentColor" d="M6 3h12v4H6V3Zm-1 6h14a3 3 0 0 1 3 3v6h-4v3H6v-3H2v-6a3 3 0 0 1 3-3Zm3 7v4h8v-4H8Z"/></svg>
+                        Print · <span lang="hi">प्रिंट</span>
+                    </button>
+                    <button id="newPhotoBtn" class="btn btn--ghost btn--xl reveal__act">
+                        <svg viewBox="0 0 24 24" class="btn__icon" aria-hidden="true"><path fill="currentColor" d="M12 5a7 7 0 1 0 7 7h-2a5 5 0 1 1-5-5V5Zm0 0 4 3-4 3V5Z"/></svg>
+                        New visa · <span lang="hi">नया</span>
+                    </button>
                 </div>
-                <p class="reveal-result__credit">Your face and body are AI-composited into a Madhya Pradesh heritage scene — actual likeness may vary slightly.</p>
+                <p class="reveal__credit">Your face and body are AI-composited into a Madhya Pradesh heritage scene — actual likeness may vary slightly.</p>
             </div>
 
+            <div class="stamp-shower" id="stampShower" aria-hidden="true"></div>
         </section>
 
-    </main>
+        <!-- Hidden staff force-reset (long-press) -->
+        <button id="staffReset" class="staff-reset" type="button" aria-label="Staff reset"></button>
 
-    <footer class="site-footer">
-        <p>Crafted for Madhya Pradesh heritage experiences · <span id="yearSpan"></span></p>
-    </footer>
+    </div>
 
-    <!-- Post-generation feedback modal -->
+    <!-- ═══ Overlay: idle warning ═══ -->
+    <div class="idle-warning" id="idleWarning" hidden>
+        <div class="idle-warning__card">
+            <svg class="idle-warning__ring" viewBox="0 0 120 120" aria-hidden="true">
+                <circle class="idle-warning__ring-bg" cx="60" cy="60" r="52"></circle>
+                <circle class="idle-warning__ring-fg" id="idleRing" cx="60" cy="60" r="52"></circle>
+            </svg>
+            <p class="idle-warning__title">Still there?<br/><span lang="hi">अभी भी यहाँ हैं?</span></p>
+            <button id="staySessionBtn" class="btn btn--gold btn--xl" type="button">Yes, continue · <span lang="hi">जारी रखें</span></button>
+        </div>
+    </div>
+
+    <!-- ═══ Overlay: camera asleep ═══ -->
+    <div class="camera-asleep" id="cameraAsleep" hidden>
+        <div class="camera-asleep__card">
+            <svg class="camera-asleep__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 5h13a2 2 0 0 1 2 2v3l4-3v12l-4-3v3a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Zm1.7-2.3 16.6 16.6-1.4 1.4L3.3 4.1l1.4-1.4Z"/></svg>
+            <p class="camera-asleep__title">The camera is asleep<br/><span lang="hi">कैमरा सो रहा है</span></p>
+            <p class="camera-asleep__hint">Allow camera access to continue.</p>
+            <button id="wakeCameraBtn" class="btn btn--gold btn--xl" type="button">Wake camera · <span lang="hi">कैमरा चालू करें</span></button>
+        </div>
+    </div>
+
+    <!-- Post-generation feedback modal — "Border Exit Survey" -->
     <div class="feedback-overlay" id="feedbackOverlay" role="dialog" aria-modal="true" aria-labelledby="feedbackTitle" hidden>
         <section class="feedback" id="feedbackPanel">
             <button type="button" class="feedback__close" id="feedbackCloseBtn" aria-label="Close feedback">&times;</button>
-            <h2 class="feedback__title" id="feedbackTitle">How did we do?</h2>
+            <p class="feedback__eyebrow">Border Exit Survey</p>
+            <h2 class="feedback__title" id="feedbackTitle">How was your journey?</h2>
 
             <div class="feedback__question">
-                <p class="feedback__label">Did you like the image?</p>
+                <p class="feedback__label">Did you like your visa photo? · <span lang="hi">आपको तस्वीर पसंद आई?</span></p>
                 <div class="rating" role="radiogroup" data-rating="rating1" aria-label="Rate the image, 1 to 5 stars">
                     <button type="button" class="rating__star" data-value="1" aria-label="1 star">★</button>
                     <button type="button" class="rating__star" data-value="2" aria-label="2 stars">★</button>
@@ -207,7 +343,7 @@
             </div>
 
             <div class="feedback__question">
-                <p class="feedback__label">Would you like to share it on social media?</p>
+                <p class="feedback__label">Would you share it? · <span lang="hi">क्या आप इसे साझा करेंगे?</span></p>
                 <div class="rating" role="radiogroup" data-rating="rating2" aria-label="How likely you would share on social media, 1 to 5 stars">
                     <button type="button" class="rating__star" data-value="1" aria-label="1 star">★</button>
                     <button type="button" class="rating__star" data-value="2" aria-label="2 stars">★</button>
@@ -219,14 +355,15 @@
 
             <div class="button-row">
                 <button type="button" id="skipFeedbackBtn" class="btn btn--ghost">Skip</button>
-                <button type="button" id="submitFeedbackBtn" class="btn btn--primary" disabled>Send feedback</button>
+                <button type="button" id="submitFeedbackBtn" class="btn btn--gold" disabled>Send feedback</button>
             </div>
 
-            <p class="feedback__thanks" id="feedbackThanks" hidden>Thank you for your feedback! ✨</p>
+            <p class="feedback__thanks" id="feedbackThanks" hidden>Thank you — safe travels! ✨</p>
         </section>
     </div>
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <span id="yearSpan" hidden></span>
 
     <script src="app.js"></script>
 </body>
