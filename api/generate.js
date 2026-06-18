@@ -27,82 +27,89 @@ function parseDataUrl(dataUrl) {
     return { mimeType: m[1] || "image/jpeg", buffer: Buffer.from(m[2], "base64") };
 }
 
-// Per-preset data: background filename, a setting noun, and gender-keyed
-// outfit phrases grounded in the actual history of each location.
-//  1-2   Khajuraho temples       → Chandela dynasty, 950-1050 CE
-//  3-4   Orchha Jahangir Mahal   → Bundela Rajput, 17th c (Mughal-era)
-//  6, 9  Holkar chhatris         → Holkar Maratha dynasty, 18th century
-//  10-11 Rajwada palace          → Holkar royal seat, built 1747
-//  12-13 Kheoni Sanctuary        → modern wildlife sanctuary (male-only on client)
+// Per-preset data: background filename, a richly described setting, and
+// gender-keyed period outfits designed from the ACTUAL history of each site.
+// Every outfit is fully covering by design (the global wardrobe rule forbids
+// any bare-chested / nude / "clothless" result — important at Khajuraho, whose
+// carvings must never be read as a styling cue).
+//   1-2   Khajuraho temples     → Chandela dynasty, 950-1050 CE
+//   3-4   Orchha Jahangir Mahal  → Bundela Rajput, Mughal-era 17th c
+//   6, 9  Maheshwar chhatris     → Holkar-Maratha, Ahilyabai era, 18th c
+//   10-11 Indore Rajwada         → Holkar royal seat, built 1747
+//   7     Sanchi Stupa           → Mauryan Buddhist monument, 3rd c BCE
+//   8     Mandu Jahaz Mahal      → Malwa Sultanate court, 15th c
+//   12-13 Kheoni Sanctuary       → modern wildlife park (male-only on client)
+//   14    Bandhavgarh Shesh Shaiya → forest jungle, ancient rock sculpture
 const PRESETS = {
     1:  { bg: "jagdambi-temple-kandariya-mahadev-temple.jpg",
-          setting: "ancient carved sandstone temple at Khajuraho",
-          male:   "chandela-era hindu devotee in a traditional white cotton dhoti, a saffron uttariya (shoulder cloth) draped over one shoulder, and a rudraksha mala",
-          female: "chandela-era noblewoman in a traditional ivory silk saree with a narrow gold border, classical temple gold jewellery (jhumka earrings, a thin choker and bangles) and a small red bindi" },
+          setting: "the Kandariya Mahadev, the grandest 11th-century Chandela sandstone temple at Khajuraho, its carved spire rising under bright open daylight",
+          male:   "a Chandela-era royal courtier in a finely draped deep-saffron silk dhoti with a woven gold border, a full cream silk angavastram wrapped across the chest and over one shoulder, a broad embroidered patka sash with tassels at the waist, a jewelled gold armlet (bajuband), layered gold-and-bead necklaces, ornate earrings and a richly wound turban with a jewel clasp — fully clothed, chest covered",
+          female: "a Chandela-era temple noblewoman in a richly draped ivory-and-gold silk saree worn over a full-coverage embroidered blouse, an ornate jewelled girdle at the waist, elaborate gold temple jewellery (layered necklaces, a broad choker, jhumka earrings, maang-tikka, armlets and stacked bangles) and a small red bindi — fully covered and modest" },
 
     2:  { bg: "lakshmana-temple-img-9753-hdr.jpg",
-          setting: "10th-century Chandela sandstone temple at Khajuraho",
-          male:   "chandela-era nobleman in a cream cotton dhoti and unstitched shoulder cloth, a simple gold armlet and a rudraksha mala around the neck",
-          female: "chandela-era noblewoman in a soft mustard silk saree with a gold border, traditional temple gold jewellery and a small red bindi" },
+          setting: "the intricately carved 10th-century Lakshmana temple at Khajuraho, a Chandela sandstone shrine under clear daylight",
+          male:   "a Chandela-era nobleman in a warm cream silk dhoti with a maroon-and-gold border, a draped angavastram covering the chest and one shoulder, a brocade patka at the waist, a gold armlet, a rudraksha-and-gold mala, ornate earrings and a simple jewelled turban — fully clothed, chest covered",
+          female: "a Chandela-era noblewoman in a deep teal-and-gold silk saree draped classically over a full embroidered choli, a jewelled waistband, rich gold temple jewellery, jhumkas, a choker, maang-tikka and stacked bangles, and a small red bindi — fully covered and modest" },
 
     3:  { bg: "jahangir-mahal-6-copy.jpg",
-          setting: "17th-century Bundela palace courtyard at Orchha",
-          male:   "bundela rajput prince in a brocade cream angarkha, churidar pyjama, a colourful safa (rajput turban) and a kamarband (waist sash), with subtle gold jewellery",
-          female: "bundela rajput princess in a deep-red silk lehenga-choli with zari embroidery, a sheer dupatta draped over the head, traditional rajput gold jewellery (maang tikka, jhumkas, choker)" },
+          setting: "the arched courtyard of the early-17th-century Jahangir Mahal at Orchha, a Bundela-Rajput palace built in the Mughal era",
+          male:   "a Bundela Rajput prince in a richly brocaded ivory-and-gold angarkha tied across the chest, a churidar pyjama, a jewelled patka sash, a vivid coloured safa turban crowned with a kalgi jewel and a pearl strand, a kundan necklace, gold armlets and a sheathed jewelled dagger tucked at the waist",
+          female: "a Bundela Rajput princess in a sumptuous deep-red and gold zari lehenga-choli with a fine net odhni draped over the head, regal kundan-polki jewellery — a borla maang-tikka, layered necklaces, a choker, jhumkas, haath-phool and bangles — fully covered and elegant" },
 
     4:  { bg: "jahangir-gate-orchha.jpg",
-          setting: "monumental Mughal-era Bundela gateway at Orchha",
-          male:   "bundela rajput warrior in a saffron brocade angarkha, churidar pyjama, a colourful safa turban, a kamarband and a scabbarded sword at the waist",
-          female: "bundela rajput princess in a maroon silk lehenga with gold zari work, a sheer dupatta draped over the head and traditional rajput gold jewellery" },
+          setting: "the towering Mughal-era Bundela gateway (Jahangir Gate) at Orchha",
+          male:   "a Bundela Rajput warrior-noble in a saffron-and-gold brocade angarkha over a churidar, a jewelled kamarband, a richly tied coloured safa turban with a sarpech ornament, a long shawl across one shoulder, a kundan necklace and a sheathed curved talwar at the waist",
+          female: "a Bundela Rajput rani in a maroon-and-antique-gold zari lehenga with a heavily bordered odhni draped over the head, ornate Rajput kundan jewellery (rakhdi maang-tikka, layered necklaces, choker, jhumkas and bangles) — fully covered and regal" },
 
     6:  { bg: "chattei-river-view-7.jpg",
-          setting: "18th-century Maratha riverside chhatri on the Narmada at Maheshwar",
-          male:   "ahilyabai-era maratha nobleman in a crisp white cotton dhoti and bandgala-style kurta with a bright red pheta (maratha turban) and a simple shawl over one shoulder",
-          female: "ahilyabai-era maharashtrian lady in a traditional burgundy nauvari saree (9-yard drape), a thushi (short gold choker), green glass bangles, a pearl necklace and a small decorative bindi" },
+          setting: "an 18th-century Holkar-Maratha riverside chhatri above the Narmada ghats at Maheshwar",
+          male:   "an Ahilyabai-era Maratha sardar in a crisp cream dhoti with a fine zari border, a buttoned bandi jacket over a kurta, a richly tied red-and-gold pheta turban with a small kalgi, a woven-border shawl over one shoulder, a pearl kanthi and gold ear-studs",
+          female: "an Ahilyabai-era Maharashtrian noblewoman in a rich burgundy-and-gold Maheshwari nauvari (nine-yard) silk saree draped in the kashta style over a full blouse, a thushi choker, a layered pearl necklace, green-and-gold glass bangles, vati earrings, a crescent chandrakor bindi and flowers in a low bun — fully covered and dignified" },
 
     9:  { bg: "krishnabai-holkar-chhatri.jpg",
-          setting: "18th-century Holkar royal chhatri at Maheshwar",
-          male:   "holkar-era maratha sardar in a cream cotton dhoti-kurta with a red pheta turban and a shawl draped over one shoulder",
-          female: "holkar-era maharashtrian queen in a royal-blue nauvari saree with gold border, a thushi, pearl necklace and ornate traditional jewellery, styled after queen ahilyabai holkar" },
+          setting: "the 18th-century Holkar royal chhatri of Krishnabai above the Narmada at Maheshwar",
+          male:   "a Holkar-era Maratha noble in a cream dhoti-kurta with a zari-bordered shoulder shawl, a deep-red pheta turban with a jewel, gold ear-studs and a pearl kanthi",
+          female: "a Holkar-era Maratha queen styled after the court of Ahilyabai Holkar, in a royal peacock-blue Maheshwari nauvari saree with a broad gold border over a full blouse, a thushi, multi-strand pearls, ornate vati earrings, green-and-gold bangles, a chandrakor bindi and flowers in the hair — regal and fully covered" },
 
     10: { bg: "rajwada-indore.jpg",
-          setting: "18th-century seven-storey Holkar palace in Indore",
-          male:   "holkar-era maharaja in a cream brocade angarkha, churidar pyjama, a jewelled red pheta turban with a sarpech ornament, a kamarband and a pearl necklace",
-          female: "holkar-era maharani in a peacock-green paithani saree with a heavy gold zari border, an ornate thushi, a multi-strand pearl necklace, maang tikka and traditional regal jewellery" },
+          setting: "the seven-storey Rajwada, the 18th-century Holkar palace facade in Indore",
+          male:   "a Holkar Maharaja in full durbar dress — an ornate cream-and-gold brocade angarkha over a churidar, a jewelled red pheta turban with a sarpech and pearl strands, a kamarband, a multi-strand pearl-and-emerald necklace, gold armlets and a shoulder shawl",
+          female: "a Holkar Maharani in a regal peacock-green Paithani silk saree with a heavy gold zari pallu and border over a full blouse, an ornate thushi and multi-strand pearl-and-emerald necklaces, a maang-tikka, vati earrings and stacked gold bangles — richly bejewelled and fully covered" },
 
     11: { bg: "rajwada-15.jpg",
-          setting: "inner courtyard of the 18th-century Holkar palace in Indore",
-          male:   "holkar-era maratha nobleman in a cream cotton dhoti-kurta with a red pheta turban and a simple shawl",
-          female: "holkar-era royal lady in a teal nauvari saree with a gold border, a thushi, pearl necklace and traditional maharashtrian jewellery" },
+          setting: "the inner courtyard of the 18th-century Holkar Rajwada palace in Indore",
+          male:   "a Holkar-era Maratha noble in a cream dhoti-kurta with a buttoned bandi jacket, a red pheta turban, a fine zari-bordered shawl and a pearl kanthi",
+          female: "a Holkar-era royal lady in a teal-and-gold Paithani silk saree draped over a full blouse, a thushi, a layered pearl necklace, vati earrings, gold bangles and a chandrakor bindi — elegant and fully covered" },
 
     12: { bg: "kheoni-wildlife-sanctuary.jpg",
-          setting: "central Indian teak and sal forest at Kheoni Wildlife Sanctuary",
-          male:   "modern wildlife safari explorer in a clean khaki short-sleeve shirt with a chest pocket, light beige cargo trousers, a wide-brim canvas safari hat and binoculars hanging around the neck",
-          female: "modern wildlife safari explorer in a clean khaki short-sleeve shirt with a chest pocket, light beige cargo trousers, a wide-brim canvas safari hat and binoculars hanging around the neck" },
+          setting: "a central Indian teak and sal forest in the Kheoni Wildlife Sanctuary",
+          male:   "a seasoned wildlife naturalist on safari in a well-worn olive-green field shirt with the sleeves rolled up and buttoned chest pockets, a lightweight khaki utility vest, sturdy beige cargo trousers, a wide-brim canvas bush hat, a brown leather field-satchel slung across the chest, a pair of binoculars on a leather strap and a vintage wristwatch",
+          female: "a seasoned wildlife naturalist on safari in a khaki field shirt with rolled sleeves and chest pockets, a lightweight olive utility vest, beige cargo trousers, a wide-brim canvas bush hat, a brown leather field-satchel across the chest, binoculars on a strap and a vintage wristwatch" },
 
     13: { bg: "kheoni-wildlife-sanctuary-1.jpg",
-          setting: "forest trail through teak and bamboo at Kheoni Wildlife Sanctuary",
-          male:   "modern wildlife safari explorer in a sand-beige short-sleeve shirt with a chest pocket, khaki cargo trousers, a wide-brim canvas safari hat and binoculars hanging around the neck",
-          female: "modern wildlife safari explorer in a sand-beige short-sleeve shirt with a chest pocket, khaki cargo trousers, a wide-brim canvas safari hat and binoculars hanging around the neck" },
+          setting: "a forest trail through teak, sal and bamboo in the Kheoni Wildlife Sanctuary",
+          male:   "a wildlife naturalist on a forest trail in a sand-beige field shirt with the sleeves rolled up and chest pockets, a patterned cotton neckerchief, khaki cargo trousers, a wide-brim canvas bush hat, a brown leather satchel across the chest, a compact field camera and a pair of binoculars on a strap",
+          female: "a wildlife naturalist on a forest trail in a sand-beige field shirt with rolled sleeves and chest pockets, a light olive vest, khaki cargo trousers, a wide-brim canvas bush hat, a brown leather satchel across the chest, binoculars and a compact field camera" },
 
-    // 5   Bhimbetka rock shelters    → prehistoric paleolithic attire, ~30,000 BCE
-    // 7   Sanchi Stupa               → modern cultural heritage explorer
-    // 8   Mandu Jahaz Mahal          → early-1900s Indian heritage traveller
-    // 14  Bandhavgarh Shesh Shaiya   → modern jungle / wildlife explorer
+    // 7  Sanchi Stupa — Mauryan Buddhist monument (~3rd c BCE). Dressed as a lay
+    //    pilgrim / donor in the style of the figures carved on the toranas
+    //    themselves — fully clothed, never bare-chested.
     7:  { bg: "sanchi-stupa.jpg",
-          setting: "the UNESCO World Heritage Site of Sanchi Stupa in Madhya Pradesh, with its great hemispherical dome and intricately carved sandstone torana gateway, under bright daylight and a dramatic cloud-filled sky",
-          male:   "modern cultural heritage explorer and traveller in a lightweight beige linen explorer shirt with the sleeves rolled up, an olive-khaki utility cargo jacket with travel pockets, khaki trekking trousers, brown hiking boots, a brown leather crossbody satchel bag clearly visible across the chest with the strap crossing the shoulder, a vintage leather wristwatch, and a lightweight neutral cotton scarf around the neck",
-          female: "modern cultural heritage explorer and traveller in a light beige safari-style explorer jacket, olive-khaki cargo trousers, comfortable brown trekking boots, a soft natural-cotton stole around the neck, a brown leather crossbody satchel bag clearly visible at the front with the strap crossing the chest and shoulder, a vintage wristwatch — natural travel-photography look, no glamour styling" },
+          setting: "the UNESCO-listed Great Stupa at Sanchi in Madhya Pradesh, a 3rd-century-BCE Mauryan Buddhist monument with its great hemispherical dome and intricately carved sandstone torana gateways, under bright daylight and a dramatic cloud-filled sky",
+          male:   "an early-historic Mauryan-era nobleman and lay pilgrim, dressed like the donor figures carved on Sanchi's own gateways: a finely woven ankle-length white antariya (lower wrap), a full cream uttariya upper cloth wrapped across the chest and over one shoulder so the torso is completely covered, a broad embroidered waist sash, heavy beaded-and-gold necklaces, armlets, large decorative earrings and an ornately wound turban (ushnisha) with a jewel — modest and fully clothed, never bare-chested",
+          female: "an early-historic Mauryan-era noblewoman and lay pilgrim, in the style of the figures carved on Sanchi's gateways: a richly draped cream-and-gold antariya over a full-coverage fitted bodice, a long uttariya shawl wrapped across the chest and shoulders, an ornate beaded girdle, heavy gold-and-bead necklaces, broad bangles, armlets, large jhumka-style earrings, a beaded headband and a small bindi — modest and fully covered" },
 
+    // 8  Mandu Jahaz Mahal — built under the Malwa Sultanate (15th c). Dressed in
+    //    Malwa-Sultanate Indo-Islamic court attire.
     8:  { bg: "jahaz-mahal-mandu.jpg",
-          setting: "the Jahaz Mahal in the Royal Enclave at Mandu, Madhya Pradesh, on a soft cloudy monsoon day with overcast diffused daylight, lush bright-green monsoon surroundings and atmospheric moisture in the air",
-          male:   "early-1900s Indian heritage traveller in a cream linen kurta shirt, a vintage safari-style overcoat, straight period trousers in muted earth tones, polished brown leather boots, a brown leather satchel bag fully visible at the front, holding a vintage leather field journal — optionally a cream sola topi pith helmet held in the hand",
-          female: "elegant early-1900s heritage lady traveller in an ankle-length linen-and-cotton period travel dress in cream or muted earth tones, a lightweight embroidered cotton shawl draped over the shoulders, a fitted period travel overcoat, brown leather ankle boots, a small vintage brown satchel bag fully visible at the front, holding an antique leather diary — natural historical appearance, no glamour makeup, no bridal styling, no heavy jewellery, modest and fully covered" },
+          setting: "the Jahaz Mahal (Ship Palace) in the Royal Enclave at Mandu, Madhya Pradesh, a 15th-century Malwa-Sultanate palace, on a soft cloudy monsoon day with overcast diffused light, lush bright-green surroundings and moisture in the air",
+          male:   "a Malwa-Sultanate courtier of Mandu in a richly brocaded long jama (Indo-Persian court robe) tied at the side over a churidar, a patterned patka sash, a kamarband, an ornate turban with a jewelled sarpech and a pearl strand, a kundan necklace and soft leather mojari — courtly and fully covered",
+          female: "a Malwa-Sultanate court lady of Mandu in an elegant full-length peshwaz gown over a churidar with a fine dupatta draped over the head, delicate kundan-and-pearl jewellery (jhumkas, a maang-tikka, layered necklaces and bangles) and henna-patterned hands — modest, refined and fully covered" },
 
     14: { bg: "shesh-shaiya-bandhavgarh.jpg",
-          setting: "beside the ancient moss-covered Shesh Shaiya reclining Vishnu rock-cut sculpture by a still forest pool deep inside the lush green jungle of Bandhavgarh National Park, Madhya Pradesh, with a dense leafy canopy, soft filtered forest light, ferns and vines",
-          male:   "modern wildlife and heritage jungle explorer in an olive-green long-sleeve cotton explorer shirt with a chest pocket, a lightweight khaki safari vest with pockets, rugged khaki trekking cargo trousers, brown jungle trekking boots, a brown leather explorer satchel clearly visible at the front with the strap crossing the chest, a pair of binoculars hanging around the neck, an optional explorer scarf — no weapons",
-          female: "modern wildlife and heritage jungle explorer in a khaki long-sleeve cotton explorer shirt, a lightweight olive safari jacket, comfortable khaki trekking trousers, brown trekking boots, a brown leather crossbody explorer satchel clearly visible at the front with the strap crossing the chest and shoulder, a pair of binoculars or a compact travel camera, a lightweight neutral scarf — natural explorer look, no glamour makeup, no jewellery" },
+          setting: "beside the ancient moss-covered Shesh Shaiya reclining-Vishnu rock sculpture by a still forest pool deep in the green jungle of Bandhavgarh National Park, Madhya Pradesh, with a dense leafy canopy, soft filtered forest light, ferns and vines",
+          male:   "a wildlife-and-heritage jungle explorer in an olive-green long-sleeve cotton explorer shirt with a chest pocket, a lightweight khaki safari vest, rugged khaki trekking cargo trousers, brown jungle boots, a brown leather explorer satchel slung across the chest, a pair of binoculars around the neck and a light explorer scarf — no weapons",
+          female: "a wildlife-and-heritage jungle explorer in a khaki long-sleeve cotton explorer shirt, a lightweight olive safari jacket, comfortable khaki trekking trousers, brown trekking boots, a brown leather crossbody explorer satchel across the chest, a pair of binoculars or a compact camera and a light neutral scarf — natural explorer look, no glamour styling" },
 };
 
 // Vision pass: "note the facial characteristics". Turns the face photo into a
@@ -117,7 +124,7 @@ async function describeFace(openai, image) {
         messages: [{
             role: "user",
             content: [
-                { type: "text", text: "Describe ONLY this person's facial characteristics for a portrait painter who must reproduce their likeness from scratch. In 3-5 precise, factual sentences cover: apparent age range, gender presentation, skin tone/complexion, face shape, forehead, eyebrows, eye shape/size/colour and spacing, nose shape, lips, cheekbones and jawline, chin, hairline, hair (length/style/colour/texture), any facial hair, and any distinctive marks (moles, dimples, etc.). Be specific and neutral. Do NOT mention lighting, camera, background, clothing, accessories or expression." },
+                { type: "text", text: "Describe ONLY this person's facial characteristics for a portrait painter who must reproduce their likeness exactly. In 3-5 precise, factual sentences cover: apparent age range, gender presentation, skin tone/complexion, face shape, forehead, eyebrows, eye shape/size/colour and spacing, nose shape, lips, cheekbones and jawline, chin, hairline, hair (length/style/colour/texture), any facial hair, and any distinctive marks (moles, dimples, etc.). Be specific and neutral. Do NOT mention lighting, camera, background, clothing, accessories or expression." },
                 { type: "image_url", image_url: { url: dataUrl, detail: "high" } },
             ],
         }],
@@ -129,31 +136,33 @@ function buildPrompt(preset, gender, hasBody, faceDescription) {
     const outfit = gender === "female" ? preset.female : preset.male;
     // Image legend + body-type rule adapt to whether a full-body shot was sent.
     const legend = hasBody
-        ? `IMAGE 1 = a reference of the person's FACE — study their facial characteristics from it, but IGNORE its lighting, colour, white balance, background, camera and pose entirely. It is a likeness reference, NOT pixels to copy.
+        ? `IMAGE 1 = a reference of the person's FACE — study their facial features from it, but IGNORE its lighting, colour, white balance, background, camera and pose. It is a likeness reference, NOT pixels to copy.
 IMAGE 2 = a full-body photo of the SAME person — use this ONLY to read their body type, build and proportions (height, weight, frame). Ignore the clothing, pose and background in Image 2.
-IMAGE 3 = the LOCATION (a real heritage site) — use this as the background and for scene lighting.`
-        : `IMAGE 1 = a reference of the person's FACE — study their facial characteristics from it, but IGNORE its lighting, colour, background, camera and pose. It is a likeness reference, NOT pixels to copy.
-IMAGE 2 = the LOCATION (a real heritage site) — use this as the background and for scene lighting.`;
+IMAGE 3 = the LOCATION (a real heritage site) — use this as the background and as the single source of scene lighting.`
+        : `IMAGE 1 = a reference of the person's FACE — study their facial features from it, but IGNORE its lighting, colour, white balance, background, camera and pose. It is a likeness reference, NOT pixels to copy.
+IMAGE 2 = the LOCATION (a real heritage site) — use this as the background and as the single source of scene lighting.`;
+    const locImage = hasBody ? "Image 3" : "Image 2";
     const faceChars = faceDescription
-        ? `\n\nThe person's facial characteristics (reproduce these faithfully): ${faceDescription}`
+        ? `\n\nThe person's facial characteristics (reproduce these EXACTLY and do not alter them): ${faceDescription}`
         : "";
     const bodyRule = hasBody
         ? `
 
 BODY TYPE — render the person with the SAME body build and proportions as the full-body person in Image 2: the same overall size and weight (slim, average or heavier), the same shoulder width and frame. Do not slim them down or bulk them up — match Image 2's build honestly.`
         : "";
-    const locImage = hasBody ? "Image 3" : "Image 2";
-    return `Create ONE photorealistic portrait by combining the reference images.
+    return `Create ONE photorealistic photograph by combining the reference images.
 
 ${legend}
 
-TASK: Show this exact person on location at ${preset.setting}, dressed as a ${outfit}. The result must look like a genuine photograph of that same individual taken at that place.
+TASK: Show this exact person on location at ${preset.setting}, dressed as ${outfit}. The result must look like a single genuine photograph of that same individual, taken at that place in one shot.
 
-IDENTITY — PAINT THE FACE FRESH, DO NOT PASTE IT. Note the person's facial characteristics from Image 1${faceDescription ? " and the description below" : ""}, then GENERATE their face entirely from scratch as a natural part of this photograph. Reproduce their recognisable features and proportions — the same eye shape and spacing, eyebrows, nose, mouth and lips, jawline, face shape, cheekbones, hairline and apparent age — so anyone who knows them recognises them instantly, while keeping their real features (do not beautify, slim, sharpen the jaw, enlarge the eyes, de-age, or swap in a different face). The face must NOT be a cut-out, overlay or copy of the reference photo; it is freshly rendered, lit only by this scene.${faceChars}${bodyRule}
+IDENTITY — ACCURATE AND UNCHANGED. Render the person's face freshly as a natural part of this photograph (not a cut-out, overlay or pasted copy of the reference), but keep their likeness EXACTLY: the same eye shape, size and spacing, the same eyebrows, nose, mouth and lips, jawline, face shape, cheekbones, hairline, complexion and apparent age — so anyone who knows them recognises them at once. Do NOT beautify, slim, smooth, sharpen the jaw, enlarge the eyes, de-age, symmetrise or substitute a different face. Their real features are fixed and must not change.${faceChars}
+
+FACE — ADJUST ANGLE, DIRECTION, LIGHTING AND TONE TO THE SCENE (BUT NEVER THE FEATURES). Pose the head naturally for the photograph: you MAY turn or tilt the face to a relaxed three-quarter or gentle side angle and aim the gaze to suit the composition — do not force a flat, front-facing, perfectly symmetrical stare. Light the face from the SAME direction and with the same softness, intensity and colour temperature as the scene, and match its skin tone, warmth, shadows and highlights to the location's light in ${locImage}. Change ONLY the head orientation, gaze direction, lighting and tone of the face — the underlying features themselves stay exactly as described above, accurate and unchanged.${bodyRule}
+
+WARDROBE & FULL COVERAGE — CRITICAL. Dress the person in the complete period outfit described above, fitted naturally to their body and pose, with rich, tasteful, historically-grounded detail: real fabric weave, embroidery, zari, drape and folds, and era-appropriate ornament — make it striking and characterful, never plain or generic. The person must be FULLY CLOTHED and modest at all times: the chest, torso, shoulders and midriff are covered by the garment — never bare-chested, topless, nude, semi-undressed or in underclothes. Some of these heritage sites carry carved figures in sensual or revealing poses; that is NOT a styling cue — ignore it entirely. If any described element would leave the torso exposed, add a covering upper garment (kurta, angavastram, choli, shawl, jacket) so the person is decently dressed. The wardrobe must never alter the face or the body build.
 
 FRAMING & POSE. A natural waist-up or three-quarter portrait with the face clearly visible, sharp and well-lit. Use a RELAXED, candid pose — a natural stance with weight shifted easily, a calm genuine expression or a soft natural smile, perhaps a slight turn of the head or shoulders. Do NOT make it a stiff, rigid, perfectly symmetrical, straight-on "mugshot". It should feel like a real travel photograph someone actually posed for at the site, not a posed studio cut-out.
-
-WARDROBE. Dress them in the period attire described above, fitted naturally to their body and pose, historically grounded and tasteful. Do not let the wardrobe change the face or body build.
 
 ABSOLUTE PROHIBITION — never add any Hindu marital-status symbol to anyone, under any circumstances: no sindoor / vermilion (red or orange powder, streak or dot) in the hair parting, no kumkum dot implying marriage, no mangalsutra (black-bead-and-gold marriage necklace), no bridal makeup, no heavy nath / nose ring, no other suhaag or saubhagya marriage marker. The hair parting stays clean with no colour; the neck carries no marriage necklace. This holds regardless of the era, region, tradition, the outfit description, or the person's apparent age or gender — and even if a reference image appears to show one, do not reproduce it. Use ONLY decorative, non-marital jewellery; when in doubt, omit it. Adding these symbols causes serious cultural and religious offence and is a critical failure.
 
