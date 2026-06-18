@@ -24,15 +24,8 @@ const state = {
     usageCounts: {},
 };
 
-// Presets that have a generated sample image. Others show the raw heritage
-// background in the picker until their sample is generated.
-const SAMPLE_PRESET_IDS = new Set([1, 2, 3, 4, 6, 7]);
-
-// The picker sample (1 per preset+gender) — shown so the visitor sees the kind
-// of result a destination produces.
-function sampleUrl(presetId, gender) {
-    return `assets/templates/sample-${presetId}-${gender || 'male'}.jpg`;
-}
+// The picker always shows the raw heritage background as the template image —
+// no generated sample user photos.
 
 // ── DOM ──────────────────────────────────────────────────────────
 const $ = (id) => document.getElementById(id);
@@ -389,7 +382,6 @@ function visiblePresets() {
 }
 
 function renderDestinations() {
-    const gender = state.selectedGender || 'male';
     const frag = document.createDocumentFragment();
     visiblePresets().forEach(p => {
         const card = document.createElement('button');
@@ -399,9 +391,8 @@ function renderDestinations() {
         card.setAttribute('aria-checked', state.selectedPreset?.id === p.id ? 'true' : 'false');
         if (state.selectedPreset?.id === p.id) card.classList.add('is-selected');
         card.dataset.presetId = p.id;
-        // Show the generated sample where we have one; otherwise the raw
-        // heritage background. (onerror is a final safety net.)
-        const thumb = SAMPLE_PRESET_IDS.has(p.id) ? sampleUrl(p.id, gender) : p.backgroundUrl;
+        // Always show the heritage background as the template image.
+        const thumb = p.backgroundUrl;
         const filename = (p.backgroundUrl || '').split('/').pop();
         const count = state.usageCounts[filename] || 0;
         card.innerHTML = `
