@@ -136,10 +136,10 @@ function buildPrompt(preset, gender, hasBody, faceDescription) {
     const outfit = gender === "female" ? preset.female : preset.male;
     // Image legend + body-type rule adapt to whether a full-body shot was sent.
     const legend = hasBody
-        ? `IMAGE 1 = a reference of the person's FACE — study their facial features from it, but IGNORE its lighting, colour, white balance, background, camera and pose. It is a likeness reference, NOT pixels to copy.
+        ? `IMAGE 1 = a reference of the person's FACE — study their facial features from it, but IGNORE its lighting, colour, white balance, background, camera and pose. It was shot at a kiosk with a bright on-camera RING LIGHT, so its face is lit flat, even and head-on with a brightened forehead/cheeks and round ring-shaped catchlights in the eyes — DISCARD that ring-light look entirely; do not reproduce the flat frontal glare or the circular catchlights. It is a likeness reference, NOT pixels to copy.
 IMAGE 2 = a full-body photo of the SAME person — use this ONLY to read their body type, build and proportions (height, weight, frame). Ignore the clothing, pose and background in Image 2.
 IMAGE 3 = the LOCATION (a real heritage site) — use this as the background and as the single source of scene lighting.`
-        : `IMAGE 1 = a reference of the person's FACE — study their facial features from it, but IGNORE its lighting, colour, white balance, background, camera and pose. It is a likeness reference, NOT pixels to copy.
+        : `IMAGE 1 = a reference of the person's FACE — study their facial features from it, but IGNORE its lighting, colour, white balance, background, camera and pose. It was shot at a kiosk with a bright on-camera RING LIGHT, so its face is lit flat, even and head-on with a brightened forehead/cheeks and round ring-shaped catchlights in the eyes — DISCARD that ring-light look entirely; do not reproduce the flat frontal glare or the circular catchlights. It is a likeness reference, NOT pixels to copy.
 IMAGE 2 = the LOCATION (a real heritage site) — use this as the background and as the single source of scene lighting.`;
     const locImage = hasBody ? "Image 3" : "Image 2";
     const faceChars = faceDescription
