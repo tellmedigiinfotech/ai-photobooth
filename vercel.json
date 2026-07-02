@@ -3,6 +3,9 @@
     "api/generate.js": {
       "maxDuration": 300
     },
+    "api/generate-group.js": {
+      "maxDuration": 300
+    },
     "api/faceswap.js": {
       "maxDuration": 120
     }

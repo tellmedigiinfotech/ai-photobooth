@@ -1523,3 +1523,48 @@ select, input { font: inherit; color: inherit; }
     .result-frame::before { display: none; }
     .result-frame img { border-radius: 0; max-height: none; }
 }
+
+/* ═══════════ EXPERIMENTAL — group photo ═══════════ */
+.group-entry {
+    flex: none; position: relative; width: 100%; text-align: left; padding: 0;
+    background: var(--paper-page); border: 2px dashed var(--gold);
+    border-radius: var(--r-md); box-shadow: var(--sh-card); overflow: hidden;
+    transition: transform var(--t-fast), border-color var(--t-fast), box-shadow var(--t-fast);
+}
+.group-entry:active { transform: scale(.99); }
+.group-entry:hover  { border-color: var(--gold-hi); }
+.group-entry__flag {
+    position: absolute; top: 0; right: 0; color: #fff; background: var(--gold-deep);
+    font-family: var(--f-mono); font-size: .56rem; font-weight: 700;
+    letter-spacing: .14em; text-transform: uppercase;
+    padding: .15rem .5rem; border-bottom-left-radius: var(--r-sm);
+}
+.group-entry__body  { display: flex; align-items: center; gap: var(--s-3); padding: var(--s-3) var(--s-4); }
+.group-entry__icon  { width: 2rem; height: 2rem; color: var(--oxblood); flex: none; }
+.group-entry__text  { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.group-entry__title { font-family: var(--f-display); font-weight: 600; font-size: 1.05rem; color: var(--ink); }
+.group-entry__sub   { font-size: .78rem; color: var(--ink-soft); }
+.group-entry__chev  { width: 1.25rem; height: 1.25rem; color: var(--gold-deep); flex: none; }
+
+/* Group banner — occupies the gender chooser's slot in group mode */
+.group-banner { flex: none; display: flex; align-items: center; gap: var(--s-3);
+    padding: var(--s-3) var(--s-4); background: var(--approved-soft);
+    border: 2px solid var(--gold); border-radius: var(--r-md); }
+.group-banner[hidden] { display: none; }
+.group-banner__flag  { font-family: var(--f-mono); font-size: .58rem; font-weight: 700;
+    letter-spacing: .14em; text-transform: uppercase; color: #fff;
+    background: var(--gold-deep); padding: .1rem .45rem; border-radius: .25rem; }
+.group-banner__label { font-family: var(--f-display); font-weight: 600; color: var(--ink); }
+.group-banner__note  { flex: 1; font-size: .76rem; color: var(--ink-soft); }
+.group-banner__exit  { font-family: var(--f-mono); font-size: .7rem; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--oxblood); text-decoration: underline; }
+
+/* Group-mode toggles — a single attribute drives the whole re-skin */
+#app[data-mode="group"] .traveller,
+#app[data-mode="group"] #groupEntry        { display: none; }
+#app[data-mode="group"] .group-banner      { display: flex; }
+#app[data-mode="group"] .destinations-lock { display: none; }   /* no gender gate */
+#app[data-mode="group"] .wells             { display: none; }   /* one shot, not two */
+
+/* Wide framing guide for the group shot (reuses the guide element) */
+.camera-frame__guide[data-shape="group"] { width: 82%; aspect-ratio: 4 / 3; border-radius: 8%; }

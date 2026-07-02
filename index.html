@@ -198,6 +198,14 @@
                 </div>
             </fieldset>
 
+            <!-- EXPERIMENTAL — group-mode banner (shown instead of the gender chooser) -->
+            <div class="group-banner" id="groupBanner" hidden>
+                <span class="group-banner__flag">Beta</span>
+                <span class="group-banner__label">Group photo · <span lang="hi">समूह</span></span>
+                <span class="group-banner__note">Each person's era dress &amp; face are auto-styled</span>
+                <button type="button" id="exitGroupBtn" class="group-banner__exit">Exit</button>
+            </div>
+
             <div class="destinations-scroll">
                 <div class="destinations" id="presetsGrid" role="radiogroup" aria-label="Heritage destinations">
                     <!-- boarding-pass cards injected by app.js -->
@@ -206,6 +214,19 @@
                     <span class="destinations-lock__stamp">Select traveller<br/><span lang="hi">पहले यात्री चुनें</span></span>
                 </div>
             </div>
+
+            <!-- EXPERIMENTAL — group photo entry (single mode only; hidden in group mode) -->
+            <button id="groupEntry" class="group-entry" type="button" aria-label="Try the experimental group photo">
+                <span class="group-entry__flag">Beta · <span lang="hi">प्रयोग</span></span>
+                <span class="group-entry__body">
+                    <svg class="group-entry__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M8 11a3 3 0 1 0-3-3 3 3 0 0 0 3 3Zm8 0a3 3 0 1 0-3-3 3 3 0 0 0 3 3Zm-8 2c-2.7 0-6 1.34-6 4v2h9v-2c0-1 .43-1.9 1.13-2.6A9.6 9.6 0 0 0 8 13Zm8 0a8.9 8.9 0 0 0-1.9.22A4.4 4.4 0 0 1 16 17v2h6v-2c0-2.66-3.3-4-6-4Z"/></svg>
+                    <span class="group-entry__text">
+                        <span class="group-entry__title">Travelling as a group?</span>
+                        <span class="group-entry__sub">One photo of 2–4 people, all dressed for the era · <span lang="hi">समूह तस्वीर</span></span>
+                    </span>
+                    <svg class="group-entry__chev" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="m9 18 6-6-6-6v12Z"/></svg>
+                </span>
+            </button>
 
             <div class="action-bar">
                 <div class="action-bar__meta">

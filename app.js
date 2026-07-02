@@ -11,7 +11,7 @@ const state = {
     screen: 'attract',
     stream: null,
     mirrorStream: null,
-    capturePhase: 'face',        // 'face' | 'body'
+    capturePhase: 'face',        // 'face' | 'body' | 'group'
     pendingBlob: null,
     pendingUrl: null,
     faceBlob: null,
@@ -22,6 +22,10 @@ const state = {
     selectedGender: null,
     cameraDevices: [],
     usageCounts: {},
+    // Experimental group mode
+    groupMode: false,
+    groupBlob: null,
+    groupUrl: null,
 };
 
 // ── DOM ──────────────────────────────────────────────────────────
@@ -73,6 +77,9 @@ const el = {
     destinationsScroll: document.querySelector('.destinations-scroll'),
     generateBtn:        $('generateBtn'),
     selectedDestName:   $('selectedDestinationName'),
+    groupEntry:         $('groupEntry'),
+    groupBanner:        $('groupBanner'),
+    exitGroupBtn:       $('exitGroupBtn'),
 
     // Generating
     loadingState:       $('loadingState'),
@@ -182,6 +189,7 @@ function preloadBrandLogos() {
 // ═══════════════════════════════════════════════════════════════
 
 function init() {
+    setMode('single');
     setCapturePhase('face');
     renderDestinations();
     populateVisaDrift();
@@ -255,6 +263,14 @@ function setScreen(name) {
     armIdle();
 }
 
+// Single vs experimental group mode — one flag, surfaced to CSS as
+// #app[data-mode] so the choose screen re-skins (gender chooser ↔ group banner)
+// without touching the single flow.
+function setMode(mode) {                 // 'single' | 'group'
+    state.groupMode = (mode === 'group');
+    el.app.dataset.mode = state.groupMode ? 'group' : 'single';
+}
+
 // Map the proven step model onto screens so the unchanged pipeline keeps working.
 function goToStep(n) {
     if (n === 1) setScreen('capture');
@@ -265,10 +281,39 @@ function goToStep(n) {
 // "Tap to begin" — leave the attract mirror, enter capture, start the camera.
 function startSession() {
     stopMirror();
+    setMode('single');
     clearWells();
     setCapturePhase('face');
     setScreen('capture');
     startCamera();
+}
+
+// EXPERIMENTAL group mode: one group photo, no gender chooser (auto-detected
+// per face server-side), pick a background, generate.
+function enterGroupMode() {
+    setMode('group');
+    // Drop any single-flow captures for privacy + clarity.
+    [state.faceUrl, state.bodyUrl, state.pendingUrl].forEach(u => { if (u) URL.revokeObjectURL(u); });
+    state.faceBlob = state.faceUrl = state.bodyBlob = state.bodyUrl = null;
+    state.pendingBlob = state.pendingUrl = null;
+    state.selectedPreset = null;
+    state.selectedGender = null;
+    el.genderRadios.forEach(r => { r.checked = false; });
+    el.selectedDestName.textContent = 'Nothing yet';
+    el.generateBtn.disabled = true;
+    setCapturePhase('group');
+    setScreen('capture');
+    if (!state.stream) startCamera();
+}
+
+function exitGroupMode() {
+    if (state.groupUrl) URL.revokeObjectURL(state.groupUrl);
+    state.groupBlob = state.groupUrl = null;
+    setMode('single');
+    clearWells();
+    setCapturePhase('face');
+    setScreen('capture');
+    if (!state.stream) startCamera();
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -320,9 +365,10 @@ function resetAll() {
     stopStream();
     stopMirror();
 
-    [state.pendingUrl, state.faceUrl, state.bodyUrl].forEach(u => { if (u) URL.revokeObjectURL(u); });
+    [state.pendingUrl, state.faceUrl, state.bodyUrl, state.groupUrl].forEach(u => { if (u) URL.revokeObjectURL(u); });
     state.pendingBlob = state.pendingUrl = null;
     state.faceBlob = state.faceUrl = state.bodyBlob = state.bodyUrl = null;
+    state.groupBlob = state.groupUrl = null;
     state.selectedPreset = null;
     state.selectedGender = null;
 
@@ -349,6 +395,7 @@ function resetAll() {
     if (feedback.overlay) feedback.overlay.hidden = true;
     resetFeedback();
 
+    setMode('single');
     setCapturePhase('face');
     renderDestinations();
     setScreen('attract');
@@ -467,6 +514,12 @@ const CAPTURE_COPY = {
         review: 'Verify your stature photo',
         guide:  'body',
     },
+    group: {
+        title:  'Group photo',
+        intro:  'Fit everyone (2–4) in the frame, all facing the camera.',
+        review: 'Everyone in frame?',
+        guide:  'group',
+    },
 };
 
 function setCapturePhase(phase) {
@@ -477,8 +530,12 @@ function setCapturePhase(phase) {
     el.captureReviewTitle.textContent = c.review;
     el.cameraGuide.dataset.shape = c.guide;
 
-    // Wells: active vs done/pending
-    if (phase === 'face') {
+    // Group is a single wide shot — no two-well checklist; show a phase hint.
+    el.capturePhaseLabel.hidden = (phase !== 'group');
+    if (phase === 'group') {
+        el.capturePhaseLabel.textContent = 'Fit everyone in the frame · सब लोग फ्रेम में';
+    } else if (phase === 'face') {
+        // Wells: active vs done/pending
         if (el.wellFace.dataset.state !== 'done') el.wellFace.dataset.state = 'active';
         if (el.wellBody.dataset.state !== 'done') el.wellBody.dataset.state = 'pending';
     } else {
@@ -561,6 +618,20 @@ function retakePhoto() {
 async function confirmCaptureAndAdvance() {
     if (!state.pendingBlob) return;
 
+    if (state.capturePhase === 'group') {
+        state.groupBlob = state.pendingBlob;
+        if (state.groupUrl) URL.revokeObjectURL(state.groupUrl);
+        state.groupUrl = state.pendingUrl;
+        state.pendingBlob = null;
+        state.pendingUrl = null;
+        el.contextPhoto.src = state.groupUrl;            // reuse the header thumb
+        if (el.destinationsScroll) el.destinationsScroll.classList.add('is-unlocked');
+        renderDestinations();
+        updateGenerateEnabled();
+        goToStep(2);
+        return;
+    }
+
     if (state.capturePhase === 'face') {
         state.faceBlob = state.pendingBlob;
         if (state.faceUrl) URL.revokeObjectURL(state.faceUrl);
@@ -591,6 +662,8 @@ async function confirmCaptureAndAdvance() {
 // ═══════════════════════════════════════════════════════════════
 
 function visiblePresets() {
+    // Group photos are mixed-gender, so hide gender-scoped presets (Kheoni).
+    if (state.groupMode) return presets.filter(p => !p.genders);
     return presets.filter(p => !p.genders || !state.selectedGender || p.genders.includes(state.selectedGender));
 }
 
@@ -660,7 +733,9 @@ function handleGenderChange(e) {
 }
 
 function updateGenerateEnabled() {
-    el.generateBtn.disabled = !(state.selectedPreset && state.selectedGender);
+    el.generateBtn.disabled = state.groupMode
+        ? !(state.groupBlob && state.selectedPreset)
+        : !(state.selectedPreset && state.selectedGender);
 }
 
 function escapeHtml(s) {
@@ -938,6 +1013,8 @@ function stopGeneratingTimers() {
 // ═══════════════════════════════════════════════════════════════
 
 async function generate() {
+    if (state.groupMode) return callGenerateGroup();
+
     if (!state.faceBlob || !state.selectedPreset || !state.selectedGender) {
         toast('Please capture your photos, pick male/female, and choose a destination.', 'error');
         return;
@@ -988,6 +1065,58 @@ async function generate() {
         stopGeneratingTimers();
         toast('Visa delayed — let’s try again. · फिर से कोशिश करें', 'error', 6000);
         // bounce back to Choose with selections intact
+        goToStep(2);
+    } finally {
+        stopGeneratingTimers();
+    }
+}
+
+// EXPERIMENTAL group generation — one group photo + a destination. Gender is
+// auto-detected per face server-side; reuses the generating/reveal/brandify path.
+async function callGenerateGroup() {
+    if (!state.groupBlob || !state.selectedPreset) {
+        toast('Take a group photo and choose a destination.', 'error');
+        return;
+    }
+
+    startGenerating();
+
+    try {
+        const groupImg = await compressImage(state.groupBlob, 0.92, 1600);
+        const groupImageDataUrl = await blobToBase64(groupImg);
+
+        stopStream();
+
+        const res = await fetch('/api/generate-group', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                groupImage: groupImageDataUrl,
+                presetId: String(state.selectedPreset.id),
+            }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+            throw new Error(data.details || data.error || 'Generation failed');
+        }
+
+        const rawDataUrl = `data:${data.mimeType};base64,${data.generatedImage}`;
+        let finalDataUrl;
+        try {
+            finalDataUrl = await brandifyImage(rawDataUrl, state.selectedPreset.name);
+        } catch (overlayErr) {
+            console.warn('Brand overlay failed, falling back to raw image:', overlayErr);
+            finalDataUrl = rawDataUrl;
+        }
+
+        finishProgress();
+        showReveal(finalDataUrl, state.selectedPreset.name);
+
+        if (data.note) toast(data.note, 'error', 6500);
+    } catch (err) {
+        console.error(err);
+        stopGeneratingTimers();
+        toast(err.message || 'Group visa delayed — let’s try again.', 'error', 6500);
         goToStep(2);
     } finally {
         stopGeneratingTimers();
@@ -1110,14 +1239,18 @@ function wireEvents() {
 
     el.editPhotoBtn.addEventListener('click', () => {
         retakePhoto();
-        clearWells();
-        setCapturePhase('face');
+        if (!state.groupMode) clearWells();
+        setCapturePhase(state.groupMode ? 'group' : 'face');
         setScreen('capture');
         if (!state.stream) startCamera();
     });
 
     el.genderRadios.forEach(r => r.addEventListener('change', handleGenderChange));
     el.generateBtn.addEventListener('click', generate);
+
+    // Experimental group photo entry / exit.
+    if (el.groupEntry)   el.groupEntry.addEventListener('click', enterGroupMode);
+    if (el.exitGroupBtn) el.exitGroupBtn.addEventListener('click', exitGroupMode);
 
     // Reveal actions — feedback rides in after the user acts on the image.
     el.newPhotoBtn.addEventListener('click', () => {

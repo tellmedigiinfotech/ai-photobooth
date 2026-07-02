@@ -1,9 +1,13 @@
 const Replicate = require("replicate");
+const { swapFace, restoreFaces, downloadAsBuffer } = require("../lib/faceswap-core.js");
 
-// JSON body: { sourceImage, targetImage } where both are data URLs. We avoid
-// multipart/form-data because Vercel drains the request stream before the
-// handler runs, which surfaces as "Unexpected end of form". With bodyParser
+// Single-face identity finisher. JSON body: { sourceImage, targetImage } as
+// data URLs. We avoid multipart/form-data because Vercel drains the request
+// stream before the handler runs ("Unexpected end of form"); with bodyParser
 // off we drain the raw stream ourselves and JSON.parse it.
+//
+// The model slugs + CodeFormer params live in lib/faceswap-core.js so this
+// single-face path and the group path (api/generate-group.js) can't drift.
 async function readJsonBody(req) {
     if (req.body && typeof req.body === "object") return req.body;
     if (typeof req.body === "string") return JSON.parse(req.body);
@@ -15,50 +19,9 @@ async function readJsonBody(req) {
     return raw ? JSON.parse(raw) : {};
 }
 
-// A data URL is already in the form Replicate accepts; just validate it.
 function isDataUrl(s) {
     return typeof s === "string" && /^data:[^;,]*;base64,/.test(s);
 }
-
-// Replicate SDK returns URL string | URL[] | FileOutput stream | object with .url().
-async function normaliseOutputToUrl(output) {
-    const first = Array.isArray(output) ? output[0] : output;
-    if (!first) return null;
-    if (typeof first === "string") return first;
-    if (typeof first.url === "function") {
-        const u = first.url();
-        return typeof u === "string" ? u : u?.toString?.();
-    }
-    return null;
-}
-
-async function downloadAsBuffer(url) {
-    const fetchRes = await fetch(url);
-    if (!fetchRes.ok) throw new Error(`Download failed: ${fetchRes.status}`);
-    const mime = fetchRes.headers.get("content-type") || "image/jpeg";
-    const buf = Buffer.from(await fetchRes.arrayBuffer());
-    return { buf, mime };
-}
-
-// Identity finisher for the Gemini scene. Two stages:
-//
-// 1. cdingram/face-swap (InsightFace inswapper): replaces ONLY the face
-//    region of the scene with the visitor's actual face embedding. Unlike
-//    the previous InstantID approach (which regenerated the whole image
-//    with SDXL and destroyed the monument/outfit), every non-face pixel of
-//    the Gemini scene survives untouched. Identity is deterministic — the
-//    output face is reconstructed from the visitor's own features.
-//
-// 2. sczhou/codeformer: inswapper works at 128px internally, so the swapped
-//    face is identity-accurate but soft. CodeFormer re-sharpens just the
-//    face. fidelity 0.9 biases hard toward keeping the swapped identity over
-//    "beautifying" (validated to stay natural, not plastic);
-//    background_enhance stays off so the scene isn't
-//    re-rendered; upscale 1 keeps the 2K output size (and the latency down).
-//
-// CodeFormer failing is not fatal — we return the soft-but-correct swap.
-const SWAP_MODEL = "cdingram/face-swap:d1d6ea8c8be89d664a07a457526f7128109dee7030fdac424788d762c71ed111";
-const RESTORE_MODEL = "sczhou/codeformer:cc4956dd26fa5a7185d5660cc9100fab1b8070a1d1654a8bb5eb6d443b020bb2";
 
 module.exports = async function handler(req, res) {
     if (req.method !== "POST") {
@@ -90,30 +53,13 @@ module.exports = async function handler(req, res) {
         const replicate = new Replicate({ auth: token });
 
         console.log("Face swap (inswapper)...");
-        const swapOutput = await replicate.run(SWAP_MODEL, {
-            input: {
-                swap_image: sourceImage,   // already a data URL
-                input_image: targetImage,  // already a data URL
-            },
-        });
-
-        const swapUrl = await normaliseOutputToUrl(swapOutput);
-        if (!swapUrl) throw new Error("Face swap returned no output");
+        const swapUrl = await swapFace(replicate, sourceImage, targetImage);
         console.log("✅ Swap done:", swapUrl);
 
         let finalUrl = swapUrl;
         try {
             console.log("Face restore (CodeFormer)...");
-            const restoreOutput = await replicate.run(RESTORE_MODEL, {
-                input: {
-                    image: swapUrl,
-                    codeformer_fidelity: 0.9,
-                    face_upsample: true,
-                    background_enhance: false,
-                    upscale: 1,
-                },
-            });
-            const restoredUrl = await normaliseOutputToUrl(restoreOutput);
+            const restoredUrl = await restoreFaces(replicate, swapUrl);
             if (restoredUrl) finalUrl = restoredUrl;
             console.log("✅ Restore done:", restoredUrl);
         } catch (restoreErr) {
