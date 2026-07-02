@@ -120,8 +120,8 @@ const presets = [
     { id: 3,  name: 'Orchha — Jahangir Mahal',        era: 'Bundela · 17th c.',      description: '17th-century Bundela palace, arched courtyards',   backgroundUrl: 'assets/backgrounds/jahangir-mahal-6-copy.jpg' },
     { id: 4,  name: 'Orchha — Jahangir Gate',         era: 'Bundela–Mughal · 17th c.', description: 'Monumental Bundela-Mughal archway',              backgroundUrl: 'assets/backgrounds/jahangir-gate-orchha.jpg' },
     { id: 8,  name: 'Mandu — Jahaz Mahal',            era: 'Malwa Sultanate · 15th c.', description: 'Ship Palace of the Royal Enclave, monsoon mood', backgroundUrl: 'assets/backgrounds/jahaz-mahal-mandu.jpg' },
-    { id: 6,  name: 'Maheshwar — Chhatri by the River', era: 'Holkar · 18th c.',     description: 'Holkar cenotaphs above the Narmada ghats',         backgroundUrl: 'assets/backgrounds/chattei-river-view-7.jpg' },
-    { id: 9,  name: 'Krishnabai Holkar Chhatri',      era: 'Holkar · 18th–19th c.',  description: "The queen's cenotaph above the Narmada, Maheshwar", backgroundUrl: 'assets/backgrounds/krishnabai-holkar-chhatri.jpg' },
+    { id: 6,  name: 'Orchha — Chhatris on the Betwa', era: 'Bundela · 16th–18th c.', description: 'Royal Bundela cenotaphs reflected in the Betwa River',  backgroundUrl: 'assets/backgrounds/chattei-river-view-7.jpg' },
+    { id: 9,  name: 'Indore — Krishnapura Chhatris',  era: 'Holkar · 19th c.',       description: 'Holkar royal cenotaphs by the Khan river, Indore',    backgroundUrl: 'assets/backgrounds/krishnabai-holkar-chhatri.jpg' },
     { id: 10, name: 'Indore — Rajwada Palace',        era: 'Holkar · 18th c.',       description: 'The seven-storey Holkar palace of Indore',         backgroundUrl: 'assets/backgrounds/rajwada-indore.jpg' },
     { id: 11, name: 'Indore — Rajwada Courtyard',     era: 'Holkar · 18th c.',       description: 'Inside the Holkar royal seat',                     backgroundUrl: 'assets/backgrounds/rajwada-15.jpg' },
     { id: 14, name: 'Bandhavgarh — Shesh Shaiya',     era: 'Kalachuri · 10th c.',    description: 'Reclining Vishnu in deep Bandhavgarh jungle',      backgroundUrl: 'assets/backgrounds/shesh-shaiya-bandhavgarh.jpg' },
@@ -137,8 +137,8 @@ const FACTS = {
     3:  "Orchha's Jahangir Mahal was built by the Bundela king Bir Singh Deo to honour a visit by the Mughal emperor Jahangir.",
     4:  'The monumental Jahangir Gate marks the grand Bundela–Mughal architecture of Orchha, on the banks of the Betwa.',
     8:  "Mandu's Jahaz Mahal — the 'Ship Palace' — seems to float between two lakes, built in the 15th century during the Malwa Sultanate.",
-    6:  'Maheshwar was the capital of the revered queen Ahilyabai Holkar; its riverside chhatris honour the Holkar rulers.',
-    9:  'This cenotaph above the Narmada at Maheshwar memorialises a Holkar queen, in the dynasty’s signature riverside style.',
+    6:  'The royal chhatris of Orchha rise in a stately row along the Betwa River — cenotaphs raised by the Bundela kings between the 16th and 18th centuries.',
+    9:  'The Krishnapura Chhatris are mid-19th-century domed cenotaphs on the banks of the Khan river in Indore, raised by the Holkars over the cremation sites of their rulers and named for Krishna Bai Holkar.',
     10: "Indore's seven-storey Rajwada palace, begun around 1747, was the seat of the Holkar dynasty.",
     11: 'Inside the Rajwada, the Holkar royal courtyard blends Maratha, Mughal and French architectural influences.',
     14: 'Deep in Bandhavgarh, a 10th-century reclining Vishnu (Shesh Shaiya) rests at the foot of the ancient hill fort.',
@@ -740,15 +740,28 @@ async function brandifyImage(dataUrl, locationName) {
     const photo = await loadImage(dataUrl);
     const [leftLogo, rightLogo] = await preloadBrandLogos();
 
-    const W = photo.naturalWidth;
-    const H = photo.naturalHeight;
+    // The physical print is 5:7 (portrait). GPT Image 2 only emits fixed sizes, so
+    // the scene is generated at the closest (1024x1536 = 2:3); normalise to 5:7
+    // here with a centre-crop "cover" — trims ~3% off the top and bottom of the
+    // 2:3 source (the scene is framed with headroom for exactly this), giving a
+    // full-bleed 5:7 image the reveal, download, share and print all inherit.
+    const PRINT_AR = 5 / 7;                     // width / height
+    const srcW = photo.naturalWidth;
+    const srcH = photo.naturalHeight;
+    let W = srcW;
+    let H = Math.round(W / PRINT_AR);           // 5:7 canvas at the source's full width
+    if (H > srcH) { H = srcH; W = Math.round(H * PRINT_AR); } // source too short → base on height
 
     const canvas = document.createElement('canvas');
     canvas.width = W;
     canvas.height = H;
     const ctx = canvas.getContext('2d');
 
-    ctx.drawImage(photo, 0, 0, W, H);
+    // "cover": fill WxH, centre-cropping whatever overflows.
+    const scale = Math.max(W / srcW, H / srcH);
+    const dw = srcW * scale;
+    const dh = srcH * scale;
+    ctx.drawImage(photo, (W - dw) / 2, (H - dh) / 2, dw, dh);
 
     const badgeD = Math.round(W * 0.11);
     const badgeR = badgeD / 2;
