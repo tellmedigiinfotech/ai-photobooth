@@ -37,10 +37,10 @@ function parseDataUrl(dataUrl) {
 //         Betwa chhatris (6)
 //   9     Krishnapura Chhatris   → Holkar-Maratha, Indore, 19th c
 //   10-11 Indore Rajwada         → Holkar royal seat, built 1747
-//   7     Sanchi Stupa           → Mauryan Buddhist monument, 3rd c BCE
-//   8     Mandu Jahaz Mahal      → Malwa Sultanate court, 15th c
+//   7     Sanchi Stupa           → Mauryan Buddhist monument, modern-day traveller
+//   8     Mandu Jahaz Mahal      → Malwa Sultanate palace, modern-day traveller
 //   12-13 Kheoni Sanctuary       → modern wildlife park (male-only on client)
-//   14    Bandhavgarh Shesh Shaiya → forest jungle, ancient rock sculpture
+//   14    Bandhavgarh Shesh Shaiya → forest jungle, modern-day outdoor traveller
 const PRESETS = {
     1:  { bg: "jagdambi-temple-kandariya-mahadev-temple.jpg",
           setting: "the Kandariya Mahadev temple, the tallest and most ornate of the Chandela sandstone shrines at Khajuraho, its soaring shikhara clustered with a rising surge of miniature spires above bands of honey-gold carving, built around 1025-1050 CE as the dynasty's grandest Shaiva monument",
@@ -92,25 +92,26 @@ const PRESETS = {
           male:   "a man in a sand-beige cotton field shirt with the sleeves rolled up and buttoned chest pockets, a faded patterned cotton neckerchief knotted at the throat, khaki ripstop cargo trousers with a canvas belt, a wide-brim canvas bush hat, a tan leather satchel slung across the chest, a compact field camera on a fabric neck strap and a pair of binoculars on a leather strap — a grounded, practical trail-naturalist look, fully clothed",
           female: "a woman in a sand-beige cotton field shirt with rolled sleeves and buttoned chest pockets, a light olive lightweight utility vest, khaki ripstop cargo trousers with a canvas belt, a wide-brim canvas bush hat, a tan leather satchel across the chest, a compact field camera on a fabric neck strap and a pair of binoculars on a leather strap — a practical, unglamorous trail-naturalist look, fully clothed" },
 
-    // 7  Sanchi Stupa — Mauryan Buddhist monument (~3rd c BCE). Dressed as a lay
-    //    pilgrim / donor in the style of the figures carved on the toranas
-    //    themselves — fully clothed, never bare-chested.
+    // 7  Sanchi Stupa — Mauryan Buddhist monument (~3rd c BCE). Contemporary
+    //    smart-casual traveller in linen echoing the torana palette.
     7:  { bg: "sanchi-stupa.jpg",
           setting: "the UNESCO-listed Great Stupa at Sanchi in Madhya Pradesh — a 3rd-century-BCE Mauryan Buddhist monument of brick-cored sandstone, its great hemispherical dome (anda) crowned by a railed harmika and tiered stone parasol, encircled by a carved stone railing (vedika) and processional path, and pierced by four richly relief-carved sandstone torana gateways added under the Satavahanas around the 1st century BCE",
-          male:   "a man in the early-historic dress of a lay pilgrim carved on Sanchi's toranas: a long ankle-length antariya of fine unbleached cotton muslin, drawn between the legs in kachcha pleats and secured with a broad woven kayabandh sash knotted in looped drum-headed ends, the whole torso and one shoulder wrapped in a draped cream uttariya folded across the chest; heavy beaded-and-gold torque necklaces, thick spiral keyura armlets, stacked plain bangles, large disc ear-ornaments, and an intricately wound ushnisha turban crowned with a small jewelled fillet — fully clothed, never bare-chested",
-          female: "a woman in the early-historic attire of a Sanchi donor figure: a pleated antariya of fine cream cotton muslin wrapped at the waist with a madder-and-indigo woven border, worn with a wrapped stanapatta breast-cloth and an uttariya scarf draped fully across the chest, over both shoulders and around the torso to the waist; a many-stranded beaded mekhala girdle at the hips, heavy bead-and-gold hara necklaces, flat bangles, spiral armlets, large ring ear-ornaments, and hair coiled and bound with a beaded fillet — fully covered, with no marital or bridal markings" },
+          male:   "a man in a crisp ecru linen-blend shirt worn open at the collar over a fine ochre cotton tee, sleeves rolled to the forearm, with tailored stone-grey chinos, a woven tan leather belt and clean minimalist off-white sneakers, a slim canvas-and-leather day satchel over one shoulder, matte tortoiseshell sunglasses tucked at the collar and a plain leather-strap watch, his own neatly groomed hair; a relaxed, put-together modern-day traveller at a Buddhist heritage site, fully clothed, never bare-chested or in period costume",
+          female: "a woman in a breezy full-length ecru linen shirt-dress with a narrow madder-red and indigo woven trim echoing Sanchi's torana palette, buttoned modestly and belted with a slim tan waist tie, three-quarter sleeves, worn with comfortable tan flat sandals, a compact rattan-and-leather crossbody bag, delicate disc ear-studs and a fine gold pendant, oversized sunglasses pushed into softly waved shoulder-length hair; a chic, understated modern-day traveller at a sacred Buddhist site, modest and fully covered, never traditional or bridal" },
 
-    // 8  Mandu Jahaz Mahal — built under the Malwa Sultanate (15th c). Dressed in
-    //    Malwa-Sultanate Indo-Islamic court attire.
+    // 8  Mandu Jahaz Mahal — Malwa Sultanate palace (15th c). Contemporary
+    //    monsoon traveller in the site's teal/rust palette.
     8:  { bg: "jahaz-mahal-mandu.jpg",
           setting: "the Jahaz Mahal (Ship Palace) at Mandu, a long, narrow two-storeyed red-sandstone pleasure-palace raised by Sultan Ghiyas-ud-din Khalji of the Malwa Sultanate on a slim strip of land between the Munj Talao and Kapur Talao lakes, so that it seems to float like an anchored ship; its arcaded facade, open terraces, overhanging balconies and blue-tiled domed chhatris rise beneath a soft, cloud-heavy monsoon sky",
-          male:   "a man in a Malwa-Sultanate courtier's ensemble as seen in Mandu's Ni'matnama paintings: a full-sleeved silk-and-gold kimkhab brocade jama, side-tied across the chest and falling below the knee over slim churidar, its waist bound by a woven patka and a striped kamarband; a high rounded Turkman-style turban of patterned silk fixed with a jewelled turban-ornament and a slender heron plume; strands of pearls and a gem-set gold collar, and pointed leather mojari, courtly and fully covered",
-          female: "a woman in a Malwa-Sultanate court lady's attire: a full-length front-opening peshwaz robe of fine muslin worn over a fitted long-sleeved kurti and slim churidar so the throat, torso and arms stay fully covered, its hems and cuffs edged in gold zari; a long patterned dupatta draped over the head and across both shoulders; gem-set gold and pearl ornaments, jhumka earrings, a jhoomar side head-ornament, layered necklaces and stacked gold bangles" },
+          male:   "a man in a lightweight monsoon-teal cotton overshirt worn open over a clean white crew tee, sleeves rolled, with slim tapered rust-brown chinos, a woven leather belt and water-ready tan leather sneakers, a packable olive rain-shell knotted at the waist, a compact canvas crossbody bag, matte sunglasses at the collar and a simple steel-strap watch, neatly groomed hair; a polished modern-day traveller exploring Mandu's monsoon palaces, fully clothed",
+          female: "a woman in a flowing monsoon-teal midi shirt-dress in soft cotton with a slim rust-red and antique-gold woven border, three-quarter sleeves and a tie waist, worn with comfortable tan leather sandals, a light packable trench folded over one arm, a compact leather crossbody bag, small gold hoop earrings and oversized sunglasses pushed into softly waved hair; an elegant contemporary modern-day traveller at a Malwa lake palace, modest and fully covered, not traditional" },
 
+    // 14 Bandhavgarh Shesh Shaiya — jungle heritage site. Contemporary
+    //    outdoor-casual traveller, never safari-costume or military.
     14: { bg: "shesh-shaiya-bandhavgarh.jpg",
           setting: "beside the moss-covered Shesh Shaiya reclining-Vishnu rock sculpture, a roughly 10th-century Kalachuri-era carving resting by a still forest pool below the Bandhavgarh hill fort, deep in the leafy jungle of Bandhavgarh National Park amid ferns, vines and soft filtered canopy light",
-          male:   "a man in an olive-green long-sleeve cotton explorer shirt with a buttoned chest pocket, a lightweight khaki safari vest with cargo pockets, rugged khaki trekking cargo trousers, sturdy brown leather jungle boots, a tan leather explorer satchel slung across the chest, a pair of binoculars around the neck and a light neutral cotton scarf — a grounded wildlife-and-heritage explorer look, no weapons, fully clothed",
-          female: "a woman in a khaki long-sleeve cotton explorer shirt buttoned to the collar, a lightweight olive safari jacket, comfortable khaki trekking trousers, sturdy brown leather trekking boots, a tan leather crossbody explorer satchel across the chest, a pair of binoculars around the neck, a compact field camera on a fabric strap and a light neutral cotton scarf — a natural, unglamorous wildlife-and-heritage explorer look, no weapons, fully clothed" },
+          male:   "a man in a breathable sage-green half-zip travel shirt with the sleeves rolled to the forearm, a lightweight quilted gilet in muted olive, slim stretch hiking trousers in warm khaki with a woven belt and low brown trail sneakers, a compact crossbody sling, sport sunglasses at the collar, a modern outdoor wristwatch and a light packable cap; a grounded, put-together modern-day traveller on a jungle heritage visit, no weapons, fully clothed",
+          female: "a woman in a breathable sage-green half-zip travel shirt with rolled sleeves, a lightweight quilted gilet in muted olive, slim stretch hiking trousers in warm khaki with a woven belt and low brown trail sneakers, a compact crossbody sling, a small travel camera on a fabric neck strap, sport sunglasses pushed into a low ponytail and a light forest-green bandana at the neck; a natural, polished modern-day traveller on a jungle heritage visit, no weapons, fully clothed" },
 };
 
 // Vision pass: "note the facial characteristics". Turns the face photo into a
